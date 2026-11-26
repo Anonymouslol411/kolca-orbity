@@ -1,6 +1,7 @@
 <nav class="admin-nav">
   <a href="{{ url_for('admin.users') }}" {% if request.endpoint in ('admin.users', 'admin.user') %}class="on"{% endif %}>Пользователи</a>
   <a href="{{ url_for('admin.orders') }}" {% if request.endpoint == 'admin.orders' %}class="on"{% endif %}>Оплаты</a>
+  <a href="{{ url_for('admin.games') }}" {% if request.endpoint == 'admin.games' %}class="on"{% endif %}>Игры</a>
   <a href="{{ url_for('admin.downloads') }}" {% if request.endpoint == 'admin.downloads' %}class="on"{% endif %}>Файлы</a>
   <a href="{{ url_for('admin.journal') }}" {% if request.endpoint == 'admin.journal' %}class="on"{% endif %}>Журнал</a>
   <form method="post" action="{{ url_for('admin.logout') }}" class="admin-out">
@@ -8,3 +9,4 @@
     <button class="link-btn" type="submit">Выйти из админки</button>
   </form>
 </nav>
+<script src="{{ url_for('static', filename='admin.js') }}" defer></script>

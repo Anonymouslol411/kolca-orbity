@@ -5,7 +5,8 @@
 <section class="section wide-admin">
   <h1>Админка</h1>
   {% include '_admin_nav.html' %}
-  {% if request.args.get('msg') == 'deleted' %}<div class="note ok">Аккаунт удалён.</div>{% endif %}
+  {% if request.args.get('msg') == 'deleted' %}<div class="note ok">Удалено аккаунтов: {{ request.args.get('n') or 1 }}.</div>{% endif %}
+  {% if request.args.get('msg') == 'need_confirm' %}<div class="note warn">Удаление не выполнено: подтвердите его в появившемся окне (нужен включённый JavaScript) или удалите аккаунт со страницы пользователя.</div>{% endif %}
   {% if not stats.ym %}<div class="note warn">API ЮMoney не подключён — оплата через ЮMoney на сайте выключена. В терминале: <code>sudo bash manage.sh yoomoney-auth</code></div>{% endif %}
   {% if stats.review %}<div class="note warn"><a href="{{ url_for('admin.orders') }}">Переводов на карту ждут проверки: {{ stats.review }}</a></div>{% endif %}
 
@@ -29,12 +30,15 @@
     <button class="btn small" type="submit">Найти</button>
   </form>
 
+  <form method="post" action="{{ url_for('admin.users_delete') }}" id="bulk-form" data-confirm-bulk>
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="">
   <div class="table-wrap">
   <table class="admin-table">
-    <thead><tr><th>ID</th><th>Почта</th><th>Доступ</th><th>Баланс</th><th>Регистрация</th></tr></thead>
+    <thead><tr><th><input type="checkbox" data-check-all aria-label="Отметить всех на странице"></th><th>ID</th><th>Почта</th><th>Доступ</th><th>Баланс</th><th>Регистрация</th><th></th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr class="{% if r.banned %}banned{% endif %}">
+        <td><input type="checkbox" name="ids" value="{{ r.id }}" aria-label="Отметить {{ r.email }}"></td>
         <td>{{ r.id }}</td>
         <td><a href="{{ url_for('admin.user', uid=r.id) }}">{{ r.email }}</a>{% if r.banned %} <span class="tag red">бан</span>{% endif %}</td>
         <td>{% if r.lifetime %}<span class="tag">навсегда</span>
@@ -43,13 +47,21 @@
             {% else %}—{% endif %}</td>
         <td>{{ fmt_rub(r.balance) }}</td>
         <td>{{ fmt_date(r.created_at) }}</td>
+        <td class="act"><button class="row-del" type="submit" name="one" value="{{ r.id }}" data-email="{{ r.email }}">Удалить</button></td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="muted">Никого не нашлось.</td></tr>
+      <tr><td colspan="7" class="muted">Никого не нашлось.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  {% if rows %}
+  <div class="bulk-bar">
+    <button class="btn small danger" type="submit" name="bulk" value="1">Удалить отмеченных</button>
+    <span class="fine">Аккаунт удаляется навсегда, история оплат сохраняется.</span>
+  </div>
+  {% endif %}
+  </form>
   {% if pages > 1 %}
   <div class="pager">
     {% if page > 1 %}<a href="?q={{ q|urlencode }}&f={{ f }}&page={{ page - 1 }}">← назад</a>{% endif %}

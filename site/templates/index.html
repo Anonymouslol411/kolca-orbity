@@ -1,9 +1,8 @@
 {% extends 'base.html' %}
+{% import '_game.html' as G with context %}
 {% block content %}
 <section class="hero">
-  <canvas id="hero-canvas" aria-hidden="true"></canvas>
   <div class="hero-inner">
-    <p class="eyebrow">{{ t('tagline') }}</p>
     <h1>{{ t('hero_title') }}</h1>
     <p class="lead">{{ t('hero_sub') }}</p>
     <div class="cta-row">
@@ -12,39 +11,46 @@
       {% else %}
         <a class="btn big" href="{{ url_for('register') }}">{{ t('cta_trial', days=trial_days) }}</a>
       {% endif %}
-      <a class="btn ghost big" href="#games">{{ t('cta_more') }}</a>
+      <a class="btn ghost big" href="{{ url_for('games_page') }}">{{ t('games_all') }}</a>
     </div>
-    <p class="fine">{{ t('hero_price', days=trial_days, month=fmt_rub(products.month.price) if products.month else '', forever=fmt_rub(products.forever.price) if products.forever else '') }}</p>
+    <p class="hero-price">{{ t('hero_price', days=trial_days, month=fmt_rub(products.month.price) if products.month else '', forever=fmt_rub(products.forever.price) if products.forever else '') }}</p>
   </div>
+  <div class="dial" aria-hidden="true"><canvas id="hero-canvas"></canvas></div>
 </section>
 
 <section id="games" class="section">
-  <h2>{{ t('games_title') }}</h2>
-  <div class="cards two">
-    <article class="card game">
-      <div class="art art-kolca" aria-hidden="true"></div>
-      <h3>{{ t('game_kolca') }}</h3>
-      <p>{{ t('game_kolca_desc') }}</p>
-    </article>
-    <article class="card game">
-      <div class="art art-orbity" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <h3>{{ t('game_orbity') }}</h3>
-      <p>{{ t('game_orbity_desc') }}</p>
-    </article>
+  <div class="section-head">
+    <h2>{{ t('games_sub_title') }}</h2>
+    <p>{{ t('games_sub_note') }}</p>
   </div>
+  <div class="shelf">
+    {{ G.builtin('kolca') }}
+    {{ G.builtin('orbity') }}
+  </div>
+  {% if extra %}
+  <div class="section-head" style="margin-top: 56px">
+    <h2>{{ t('games_more_title') }}</h2>
+    <a href="{{ url_for('games_page') }}">{{ t('games_all') }}</a>
+  </div>
+  <div class="shelf">
+    {% for g in extra %}{{ G.extra(g) }}{% endfor %}
+  </div>
+  {% endif %}
 </section>
 
-<section class="section">
-  <h2>{{ t('features_title') }}</h2>
-  <div class="cards four">
-    {% for i in range(1, 5) %}
-    <div class="card feature"><h3>{{ t('f%d_title' % i) }}</h3><p>{{ t('f%d_text' % i) }}</p></div>
-    {% endfor %}
+<section class="section tint">
+  <div class="in">
+    <h2>{{ t('features_title') }}</h2>
+    <div class="perks-grid">
+      {% for i in range(1, 5) %}
+      <div class="perk"><h3>{{ t('f%d_title' % i) }}</h3><p>{{ t('f%d_text' % i) }}</p></div>
+      {% endfor %}
+    </div>
   </div>
 </section>
 
 <section class="section" id="pricing">
-  <h2>{{ t('pricing_title') }}</h2>
+  <div class="section-head"><h2>{{ t('pricing_title') }}</h2></div>
   {% include '_plans.html' %}
 </section>
 
@@ -60,11 +66,13 @@
   </div>
 </section>
 
-<section class="section center">
-  <h2>{{ t('download_title') }}</h2>
-  <p>{{ t('download_text') }}</p>
-  <a class="btn ghost" href="{{ url_for('downloads') }}">{{ t('download_btn') }}</a>
+<section class="section tint">
+  <div class="in center">
+    <h2>{{ t('download_title') }}</h2>
+    <p class="muted">{{ t('download_text') }}</p>
+    <a class="btn ghost" href="{{ url_for('downloads') }}">{{ t('download_btn') }}</a>
+  </div>
 </section>
 
-<script src="{{ url_for('static', filename='hero.js') }}" defer></script>
+<script src="{{ url_for('static', filename='hero.js') }}?v=3" defer></script>
 {% endblock %}

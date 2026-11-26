@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Игры — Админка{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="section wide-admin">
+  <h1>Админка</h1>
+  {% include '_admin_nav.html' %}
+  {% set msgs = {'saved': ('ok', 'Сохранено.'), 'deleted': ('ok', 'Игра удалена.'), 'bad_url': ('warn', 'Ссылка должна начинаться с http:// или https://.'),
+                 'no_title': ('warn', 'Укажите название.'), 'bad_cover': ('warn', 'Обложка — картинка PNG, JPG или WebP до 5 МБ.')} %}
+  {% if msg in msgs %}<div class="note {{ msgs[msg][0] }}">{{ msgs[msg][1] }}</div>{% endif %}
+
+  <p class="muted">«Кольца» и «Орбиты» встроены в сайт и входят в подписку. Здесь — остальные игры для раздела «Игры»:
+    готовые (со ссылкой: Roblox, itch.io, скачивание) и те, что выйдут позже.</p>
+
+  <div class="admin-games">
+    <div class="card">
+      <h3>Каталог</h3>
+      {% for g in games %}
+      <div class="ag-row">
+        {% if g.cover %}<div class="disc cover-img"><img src="{{ url_for('cover_file', name=g.cover) }}" alt=""></div>
+        {% else %}<div class="disc disc-hue" style="--h: {{ g.hue }}"></div>{% endif %}
+        <div>
+          <b>{{ g.title }}</b> {% if g.status == 'soon' %}<span class="tag">скоро</span>{% else %}<span class="tag">доступна</span>{% endif %}
+          <div class="fine">{{ g.description|truncate(90) }}{% if g.url %}<br>{{ g.url|truncate(60) }}{% endif %}</div>
+        </div>
+        <div>
+          <a href="{{ url_for('admin.games', edit=g.id) }}">Изменить</a>
+          <form method="post" class="inline-check" data-confirm="Удалить игру «{{ g.title }}» из каталога?">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ g.id }}">
+            <button class="link-btn danger-link" type="submit">Удалить</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <p class="muted">Пока пусто. Добавьте первую игру справа — она появится на сайте в разделе «Игры».</p>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <h3>{% if cur %}Изменить «{{ cur.title }}»{% else %}Добавить игру{% endif %}</h3>
+      <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="save">
+        {% if cur %}<input type="hidden" name="id" value="{{ cur.id }}">{% endif %}
+        <label>Название<input type="text" name="title" maxlength="60" required value="{{ cur.title if cur else '' }}"></label>
+        <label>Описание (одна-две фразы)<textarea name="description" maxlength="300">{{ cur.description if cur else '' }}</textarea></label>
+        <label>Статус
+          <select class="field" name="status">
+            <option value="soon" {% if not cur or cur.status == 'soon' %}selected{% endif %}>Скоро — анонс, без кнопки</option>
+            <option value="live" {% if cur and cur.status == 'live' %}selected{% endif %}>Доступна — кнопка «Открыть» ведёт по ссылке</option>
+          </select></label>
+        <label>Ссылка (для доступных игр)<input type="url" name="url" placeholder="https://www.roblox.com/games/…" value="{{ cur.url or '' if cur else '' }}"></label>
+        <label>Обложка — PNG, JPG или WebP до 5 МБ (необязательно)<input type="file" name="cover" accept="image/png,image/jpeg,image/webp"></label>
+        {% if cur and cur.cover %}<label class="check"><input type="checkbox" name="drop_cover" value="1"> <span>Убрать обложку</span></label>{% endif %}
+        <label>Цвет диска, если нет обложки
+          <span class="hue-row"><input type="range" name="hue" min="0" max="359" value="{{ cur.hue if cur else 200 }}" data-hue>
+          <span class="disc disc-hue hue-preview" style="--h: {{ cur.hue if cur else 200 }}" data-hue-preview></span></span></label>
+        <label>Порядок (меньше — выше)<input type="number" name="sort" min="0" max="9999" value="{{ cur.sort if cur else 100 }}"></label>
+        <button class="btn wide" type="submit">{% if cur %}Сохранить{% else %}Добавить{% endif %}</button>
+        {% if cur %}<p class="center"><a href="{{ url_for('admin.games') }}">Отмена</a></p>{% endif %}
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}

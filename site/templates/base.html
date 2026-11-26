@@ -8,18 +8,20 @@
 <meta property="og:title" content="{{ site_name }} — {{ t('tagline') }}">
 <meta property="og:description" content="{{ t('meta_description') }}">
 <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="theme-color" content="#0f1233">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
 {% block head %}{% endblock %}
 </head>
 <body>
 <header class="top">
   <a class="logo" href="{{ url_for('index') }}"><span class="logo-mark"></span>{{ site_name }}</a>
   <nav>
-    <a href="{{ url_for('index') }}#games">{{ t('nav_games') }}</a>
-    <a href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a>
-    <a href="{{ url_for('downloads') }}">{{ t('nav_downloads') }}</a>
+    {% set ep = request.endpoint %}
+    <a href="{{ url_for('games_page') }}" {% if ep == 'games_page' %}class="on"{% endif %}>{{ t('nav_games') }}</a>
+    <a href="{{ url_for('pricing') }}" {% if ep == 'pricing' %}class="on"{% endif %}>{{ t('nav_pricing') }}</a>
+    <a href="{{ url_for('downloads') }}" {% if ep == 'downloads' %}class="on"{% endif %}>{{ t('nav_downloads') }}</a>
     {% if user %}
-      <a href="{{ url_for('account') }}">{{ t('nav_account') }}</a>
+      <a href="{{ url_for('account') }}" {% if ep == 'account' %}class="on"{% endif %}>{{ t('nav_account') }}</a>
     {% else %}
       <a href="{{ url_for('login') }}">{{ t('nav_login') }}</a>
       <a class="btn small" href="{{ url_for('register') }}">{{ t('nav_register') }}</a>

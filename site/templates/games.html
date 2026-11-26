@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% import '_game.html' as G with context %}
+{% block title %}{{ t('nav_games') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section">
+  <h1>{{ t('nav_games') }}</h1>
+
+  <div class="shelf-label"><h2>{{ t('games_sub_title') }}</h2></div>
+  <p class="scope-note">{{ t('games_sub_note') }} <a href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a></p>
+  <div class="shelf">
+    {{ G.builtin('kolca') }}
+    {{ G.builtin('orbity') }}
+  </div>
+
+  {% set live = extra | selectattr('status', 'equalto', 'live') | list %}
+  {% set soon = extra | selectattr('status', 'equalto', 'soon') | list %}
+  {% if live %}
+  <div class="shelf-label" style="margin-top: 64px"><h2>{{ t('games_more_title') }}</h2><p>{{ t('games_more_note') }}</p></div>
+  <div class="shelf">{% for g in live %}{{ G.extra(g) }}{% endfor %}</div>
+  {% endif %}
+
+  <div class="shelf-label" style="margin-top: 64px"><h2>{{ t('games_soon_title') }}</h2></div>
+  {% if soon %}
+  <div class="shelf">{% for g in soon %}{{ G.extra(g) }}{% endfor %}</div>
+  {% else %}
+  <p class="muted">{{ t('games_empty') }}</p>
+  {% endif %}
+</section>
+{% endblock %}

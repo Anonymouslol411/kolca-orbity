@@ -13,20 +13,15 @@
 
   <div class="card">
     <p class="muted">{{ user.email }}</p>
-    {% if user.lifetime %}
-      <h2>{{ t('status_forever') }}</h2>
-    {% elif (user.paid_until or 0) > now %}
-      <h2>{{ t('status_until', date=fmt_date(user.paid_until)) }}</h2>
-    {% elif (user.trial_end or 0) > now %}
-      <h2>{{ t('status_trial', date=fmt_date(user.trial_end, True)) }}</h2>
-    {% else %}
-      <h2>{{ t('status_none') }}</h2>
-    {% endif %}
+    <p class="big-status">{% if user.lifetime %}{{ t('status_forever') }}
+    {% elif (user.paid_until or 0) > now %}{{ t('status_until', date=fmt_date(user.paid_until)) }}
+    {% elif (user.trial_end or 0) > now %}{{ t('status_trial', date=fmt_date(user.trial_end, True)) }}
+    {% else %}{{ t('status_none') }}{% endif %}</p>
 
     {% if can_play(user) %}
       <div class="cta-row left">
-        {% for g in games %}<a class="btn" href="{{ url_for('play', game=g) }}">▶ {{ t('game_' + g) }}</a>{% endfor %}
-        {% if can_download(user) %}<a class="btn ghost" href="{{ url_for('downloads') }}">⬇ {{ t('nav_downloads') }}</a>{% endif %}
+        {% for g in games %}<a class="btn" href="{{ url_for('play', game=g) }}">{{ t('play_btn') }}: {{ t('game_' + g) }}</a>{% endfor %}
+        {% if can_download(user) %}<a class="btn ghost" href="{{ url_for('downloads') }}">{{ t('nav_downloads') }}</a>{% endif %}
       </div>
     {% endif %}
     {% if not user.lifetime %}
@@ -37,6 +32,7 @@
   <div class="card">
     <h3>{{ t('balance') }}: {{ fmt_rub(user.balance) }}</h3>
     <p class="muted">{{ t('balance_note') }}</p>
+    {% if tg_bot and user.tg_id %}<a class="btn small ghost" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_topup') }}</a>{% endif %}
   </div>
 
   {% if tg_bot %}

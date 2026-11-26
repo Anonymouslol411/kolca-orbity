@@ -1,0 +1,30 @@
+{# Карточка игры на «полке»: обложка-диск, название, описание, кнопка #}
+{% macro builtin(code) %}
+<article class="game-item">
+  {% if code == 'kolca' %}<div class="disc disc-kolca" aria-hidden="true"></div>
+  {% else %}<div class="disc disc-orbity" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>{% endif %}
+  <h3>{{ t('game_' + code) }}</h3>
+  <p>{{ t('game_' + code + '_desc') }}</p>
+  {% if user and can_play(user) %}
+    <a class="btn small" href="{{ url_for('play', game=code) }}">{{ t('play_btn') }}</a>
+  {% elif user %}
+    <a class="btn small" href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a>
+  {% else %}
+    <a class="btn small" href="{{ url_for('register') }}">{{ t('play_btn') }}</a>
+  {% endif %}
+</article>
+{% endmacro %}
+
+{% macro extra(g) %}
+<article class="game-item {% if g.status == 'soon' %}soon{% endif %}">
+  {% if g.cover %}<div class="disc cover-img"><img src="{{ url_for('cover_file', name=g.cover) }}" alt="" loading="lazy"></div>
+  {% else %}<div class="disc disc-hue" style="--h: {{ g.hue }}" aria-hidden="true"></div>{% endif %}
+  <h3>{{ g.title }}</h3>
+  <p>{{ g.description }}</p>
+  {% if g.status == 'soon' %}
+    <span class="pill">{{ t('games_soon') }}</span>
+  {% elif g.url %}
+    <a class="btn small ghost" href="{{ g.url }}" target="_blank" rel="noopener noreferrer">{{ t('games_open') }}</a>
+  {% endif %}
+</article>
+{% endmacro %}
