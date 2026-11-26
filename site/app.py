@@ -79,6 +79,12 @@ CARD_NUMBER = re.sub(r'\D', '', env('CARD_NUMBER') or '')
 CARD_HOLDER = env('CARD_HOLDER') or ''
 CARD_BANK = env('CARD_BANK') or ''
 
+# Telegram-бот: оплата звёздами Telegram (покупатель платит рублями, покупая звёзды в Telegram)
+TG_BOT_TOKEN = env('TG_BOT_TOKEN') or ''
+TG_STAR_RUB = float(env('TG_STAR_RUB') or 1.5)        # сколько рублей засчитывается за 1 звезду
+TG_ADMIN_ID = int(re.sub(r'\D', '', env('TG_ADMIN_ID') or '') or 0)   # ваш Telegram ID — для уведомлений об оплатах
+TG_TOPUP_PACKS = [int(x) for x in re.findall(r'\d+', env('TG_TOPUP_PACKS') or '100,250,500,1000') if 0 < int(x) <= 100000]
+
 SMTP_HOST = env('SMTP_HOST') or ''
 SMTP_PORT = int(env('SMTP_PORT') or 587)
 SMTP_USER = env('SMTP_USER') or ''
@@ -102,12 +108,23 @@ def yoomoney_token(con=None):
     return setting(con, 'yoomoney_token') or ''
 
 
+def stars_price(rub):
+    """Цена в звёздах Telegram для суммы в рублях (округление вверх)."""
+    return max(1, -int(-rub // TG_STAR_RUB))
+
+
+def tg_bot_username(con=None):
+    return setting(con or db(), 'tg_bot_username') or '' if TG_BOT_TOKEN else ''
+
+
 def methods_available():
     m = []
     if YOOMONEY_WALLET and yoomoney_token():      # оплату ЮMoney проверяет сервер через API — без токена способ выключен
         m += ['yoomoney_card', 'yoomoney_wallet']
     if CARD_NUMBER:
         m.append('card')
+    if tg_bot_username():
+        m.append('telegram')
     return m
 
 
@@ -148,6 +165,11 @@ CREATE TABLE IF NOT EXISTS admin_log (
 CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS attempts_key ON attempts(key, ts);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS tg_links (
+    code TEXT PRIMARY KEY, user_id INTEGER NOT NULL, product TEXT, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS tg_payments (
+    charge_id TEXT PRIMARY KEY, user_id INTEGER, tg_id INTEGER, stars INTEGER NOT NULL, kind TEXT NOT NULL,
+    rub REAL, order_id TEXT, applied INTEGER NOT NULL DEFAULT 0, refunded INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 """
 
 
@@ -157,6 +179,14 @@ def db_connect():
     con.row_factory = sqlite3.Row
     con.execute('PRAGMA journal_mode=WAL')
     con.executescript(SCHEMA)
+    cols = {r[1] for r in con.execute('PRAGMA table_info(users)')}
+    if 'tg_id' not in cols:     # обновление старой базы
+        try:
+            con.execute('ALTER TABLE users ADD COLUMN tg_id INTEGER')
+        except sqlite3.OperationalError:
+            pass                # другой процесс уже добавил
+    con.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_tg ON users(tg_id) WHERE tg_id IS NOT NULL')
+    con.commit()
     return con
 
 
@@ -290,7 +320,7 @@ def setup_request():
 CSP = ("default-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; "
        "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' data: blob:; "
        "font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'; "
-       "form-action 'self' https://yoomoney.ru")
+       "form-action 'self' https://yoomoney.ru https://t.me")
 
 
 @app.after_request
@@ -317,7 +347,8 @@ def inject():
     return dict(t=t, lang=g.get('lang', 'ru'), langs=I18N['_languages'], user=g.get('user'), csrf=session.get('csrf'),
                 trial_days=TRIAL_DAYS, site_name=SITE_NAME, support_email=SUPPORT_EMAIL, games=GAMES,
                 products=PRODUCTS, methods=methods_available(), fmt_rub=fmt_rub, fmt_date=fmt_date,
-                can_play=can_play, can_download=can_download, now=now())
+                can_play=can_play, can_download=can_download, now=now(),
+                tg_bot=tg_bot_username() if g.get('user') else '')
 
 
 def check_csrf():
@@ -545,6 +576,33 @@ def change_password():
     return redirect(url_for('account', pwchanged=1))
 
 
+def tg_link_url(con, user_id, product=None):
+    """Одноразовая ссылка t.me/бот?start=КОД (15 минут) — привязывает Telegram к аккаунту."""
+    con.execute('DELETE FROM tg_links WHERE expires<? OR user_id=?', (now(), user_id))
+    code = secrets.token_urlsafe(18)
+    con.execute('INSERT INTO tg_links (code, user_id, product, expires) VALUES (?,?,?,?)',
+                (code, user_id, product, now() + 900))
+    con.commit()
+    return f'https://t.me/{tg_bot_username(con)}?start={code}'
+
+
+@app.route('/account/telegram', methods=['POST'])
+@login_required
+def account_telegram():
+    check_csrf()
+    con = db()
+    if request.form.get('action') == 'unlink':
+        con.execute('UPDATE users SET tg_id=NULL WHERE id=?', (g.user['id'],))
+        con.commit()
+        return redirect(url_for('account'))
+    if not tg_bot_username(con):
+        abort(404)
+    if too_many(con, 'tg|' + str(g.user['id']), 20, 3600):
+        return redirect(url_for('account', wait=1))
+    note_attempt(con, 'tg|' + str(g.user['id']))
+    return redirect(tg_link_url(con, g.user['id']))
+
+
 # ---------------------------------------------------------------- игры и скачивание
 @app.route('/play/<game>')
 @login_required
@@ -642,6 +700,8 @@ def buy():
 
     if method not in methods_available():
         return redirect(url_for('pricing', unavailable=1))
+    if method == 'telegram':      # оплата идёт в боте: даём одноразовую ссылку, бот сам выставит счёт
+        return redirect(tg_link_url(con, g.user['id'], product))
     oid = new_order(con, g.user['id'], product, method)
     return redirect(url_for('pay', oid=oid))
 

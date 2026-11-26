@@ -877,6 +877,21 @@ R4 = {
 for code in T:
     T[code].update(R4[code])
 
+
+R5 = {
+ 'ru': dict(m_telegram='Звёздами в Telegram-боте', tg_text='Привяжите Telegram, чтобы оплачивать покупки и пополнять баланс звёздами в нашем боте.', tg_link='Привязать Telegram', tg_linked='Telegram привязан — покупки и пополнение баланса доступны в боте.', tg_open='Открыть бота', tg_unlink='Отвязать'),
+ 'en': dict(m_telegram='Telegram Stars in our bot', tg_text='Link Telegram to pay and top up your balance with Stars in our bot.', tg_link='Link Telegram', tg_linked='Telegram is linked — you can buy and top up your balance in the bot.', tg_open='Open the bot', tg_unlink='Unlink'),
+ 'uk': dict(m_telegram='Зірками в Telegram-боті', tg_text='Прив’яжіть Telegram, щоб оплачувати покупки й поповнювати баланс зірками в нашому боті.', tg_link='Прив’язати Telegram', tg_linked='Telegram прив’язано — покупки й поповнення балансу доступні в боті.', tg_open='Відкрити бота', tg_unlink='Відв’язати'),
+ 'es': dict(m_telegram='Estrellas de Telegram en el bot', tg_text='Vincula Telegram para pagar y recargar tu saldo con Estrellas en nuestro bot.', tg_link='Vincular Telegram', tg_linked='Telegram vinculado: puedes comprar y recargar el saldo en el bot.', tg_open='Abrir el bot', tg_unlink='Desvincular'),
+ 'de': dict(m_telegram='Telegram-Sterne im Bot', tg_text='Verknüpfe Telegram, um im Bot mit Sternen zu bezahlen und dein Guthaben aufzuladen.', tg_link='Telegram verknüpfen', tg_linked='Telegram ist verknüpft – Käufe und Aufladungen gehen im Bot.', tg_open='Bot öffnen', tg_unlink='Trennen'),
+ 'fr': dict(m_telegram='Étoiles Telegram dans le bot', tg_text='Liez Telegram pour payer et recharger votre solde avec des Étoiles dans notre bot.', tg_link='Lier Telegram', tg_linked='Telegram est lié : achats et recharges se font dans le bot.', tg_open='Ouvrir le bot', tg_unlink='Délier'),
+ 'pt': dict(m_telegram='Estrelas do Telegram no bot', tg_text='Vincule o Telegram para pagar e recarregar o saldo com Estrelas no nosso bot.', tg_link='Vincular Telegram', tg_linked='Telegram vinculado — compras e recargas estão no bot.', tg_open='Abrir o bot', tg_unlink='Desvincular'),
+ 'tr': dict(m_telegram='Bottaki Telegram Yıldızları', tg_text='Botumuzda Yıldızlarla ödeme yapmak ve bakiye yüklemek için Telegram’ı bağlayın.', tg_link='Telegram’ı bağla', tg_linked='Telegram bağlı — satın alma ve bakiye yükleme botta.', tg_open='Botu aç', tg_unlink='Bağlantıyı kaldır'),
+ 'zh': dict(m_telegram='在机器人中用 Telegram 星星支付', tg_text='绑定 Telegram，即可在我们的机器人中用星星付款和充值余额。', tg_link='绑定 Telegram', tg_linked='Telegram 已绑定，可在机器人中购买和充值。', tg_open='打开机器人', tg_unlink='解除绑定'),
+}
+for code in T:
+    T[code].update(R5[code])
+
 base = set(T['en'])
 for code, tr in T.items():
     missing = base - set(tr)

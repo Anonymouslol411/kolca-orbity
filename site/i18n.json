@@ -183,7 +183,13 @@
   "btn_i_paid": "Я перевёл",
   "card_after": "Проверим перевод и откроем доступ — обычно в течение нескольких часов.",
   "btn_check_payment": "Проверить оплату",
-  "msg_notyet": "Оплата пока не поступила. Сервер проверяет её сам каждую минуту — доступ откроется автоматически."
+  "msg_notyet": "Оплата пока не поступила. Сервер проверяет её сам каждую минуту — доступ откроется автоматически.",
+  "m_telegram": "Звёздами в Telegram-боте",
+  "tg_text": "Привяжите Telegram, чтобы оплачивать покупки и пополнять баланс звёздами в нашем боте.",
+  "tg_link": "Привязать Telegram",
+  "tg_linked": "Telegram привязан — покупки и пополнение баланса доступны в боте.",
+  "tg_open": "Открыть бота",
+  "tg_unlink": "Отвязать"
  },
  "en": {
   "tagline": "music games",
@@ -323,7 +329,13 @@
   "btn_i_paid": "I have paid",
   "card_after": "We will check the transfer and unlock access, usually within a few hours.",
   "btn_check_payment": "Check payment",
-  "msg_notyet": "The payment has not arrived yet. The server checks every minute — access will open automatically."
+  "msg_notyet": "The payment has not arrived yet. The server checks every minute — access will open automatically.",
+  "m_telegram": "Telegram Stars in our bot",
+  "tg_text": "Link Telegram to pay and top up your balance with Stars in our bot.",
+  "tg_link": "Link Telegram",
+  "tg_linked": "Telegram is linked — you can buy and top up your balance in the bot.",
+  "tg_open": "Open the bot",
+  "tg_unlink": "Unlink"
  },
  "uk": {
   "tagline": "музичні ігри",
@@ -463,7 +475,13 @@
   "btn_i_paid": "Я переказав",
   "card_after": "Перевіримо переказ і відкриємо доступ — зазвичай протягом кількох годин.",
   "btn_check_payment": "Перевірити оплату",
-  "msg_notyet": "Оплата ще не надійшла. Сервер перевіряє її щохвилини — доступ відкриється автоматично."
+  "msg_notyet": "Оплата ще не надійшла. Сервер перевіряє її щохвилини — доступ відкриється автоматично.",
+  "m_telegram": "Зірками в Telegram-боті",
+  "tg_text": "Прив’яжіть Telegram, щоб оплачувати покупки й поповнювати баланс зірками в нашому боті.",
+  "tg_link": "Прив’язати Telegram",
+  "tg_linked": "Telegram прив’язано — покупки й поповнення балансу доступні в боті.",
+  "tg_open": "Відкрити бота",
+  "tg_unlink": "Відв’язати"
  },
  "es": {
   "tagline": "juegos musicales",
@@ -603,7 +621,13 @@
   "btn_i_paid": "Ya he pagado",
   "card_after": "Revisaremos la transferencia y abriremos el acceso, normalmente en unas horas.",
   "btn_check_payment": "Comprobar pago",
-  "msg_notyet": "El pago aún no ha llegado. El servidor lo comprueba cada minuto y el acceso se abrirá solo."
+  "msg_notyet": "El pago aún no ha llegado. El servidor lo comprueba cada minuto y el acceso se abrirá solo.",
+  "m_telegram": "Estrellas de Telegram en el bot",
+  "tg_text": "Vincula Telegram para pagar y recargar tu saldo con Estrellas en nuestro bot.",
+  "tg_link": "Vincular Telegram",
+  "tg_linked": "Telegram vinculado: puedes comprar y recargar el saldo en el bot.",
+  "tg_open": "Abrir el bot",
+  "tg_unlink": "Desvincular"
  },
  "de": {
   "tagline": "Musikspiele",
@@ -743,7 +767,13 @@
   "btn_i_paid": "Ich habe bezahlt",
   "card_after": "Wir prüfen die Überweisung und schalten den Zugang frei, meist innerhalb weniger Stunden.",
   "btn_check_payment": "Zahlung prüfen",
-  "msg_notyet": "Die Zahlung ist noch nicht eingegangen. Der Server prüft jede Minute – der Zugang wird automatisch freigeschaltet."
+  "msg_notyet": "Die Zahlung ist noch nicht eingegangen. Der Server prüft jede Minute – der Zugang wird automatisch freigeschaltet.",
+  "m_telegram": "Telegram-Sterne im Bot",
+  "tg_text": "Verknüpfe Telegram, um im Bot mit Sternen zu bezahlen und dein Guthaben aufzuladen.",
+  "tg_link": "Telegram verknüpfen",
+  "tg_linked": "Telegram ist verknüpft – Käufe und Aufladungen gehen im Bot.",
+  "tg_open": "Bot öffnen",
+  "tg_unlink": "Trennen"
  },
  "fr": {
   "tagline": "jeux musicaux",
@@ -883,7 +913,13 @@
   "btn_i_paid": "J’ai payé",
   "card_after": "Nous vérifions le virement et ouvrons l’accès, généralement en quelques heures.",
   "btn_check_payment": "Vérifier le paiement",
-  "msg_notyet": "Le paiement n’est pas encore arrivé. Le serveur vérifie chaque minute : l’accès s’ouvrira automatiquement."
+  "msg_notyet": "Le paiement n’est pas encore arrivé. Le serveur vérifie chaque minute : l’accès s’ouvrira automatiquement.",
+  "m_telegram": "Étoiles Telegram dans le bot",
+  "tg_text": "Liez Telegram pour payer et recharger votre solde avec des Étoiles dans notre bot.",
+  "tg_link": "Lier Telegram",
+  "tg_linked": "Telegram est lié : achats et recharges se font dans le bot.",
+  "tg_open": "Ouvrir le bot",
+  "tg_unlink": "Délier"
  },
  "pt": {
   "tagline": "jogos musicais",
@@ -1023,7 +1059,13 @@
   "btn_i_paid": "Já paguei",
   "card_after": "Vamos conferir a transferência e liberar o acesso, normalmente em algumas horas.",
   "btn_check_payment": "Verificar pagamento",
-  "msg_notyet": "O pagamento ainda não chegou. O servidor verifica a cada minuto — o acesso abrirá automaticamente."
+  "msg_notyet": "O pagamento ainda não chegou. O servidor verifica a cada minuto — o acesso abrirá automaticamente.",
+  "m_telegram": "Estrelas do Telegram no bot",
+  "tg_text": "Vincule o Telegram para pagar e recarregar o saldo com Estrelas no nosso bot.",
+  "tg_link": "Vincular Telegram",
+  "tg_linked": "Telegram vinculado — compras e recargas estão no bot.",
+  "tg_open": "Abrir o bot",
+  "tg_unlink": "Desvincular"
  },
  "tr": {
   "tagline": "müzik oyunları",
@@ -1163,7 +1205,13 @@
   "btn_i_paid": "Ödedim",
   "card_after": "Havaleyi kontrol edip erişimi açacağız, genellikle birkaç saat içinde.",
   "btn_check_payment": "Ödemeyi kontrol et",
-  "msg_notyet": "Ödeme henüz ulaşmadı. Sunucu her dakika kontrol ediyor — erişim otomatik açılacak."
+  "msg_notyet": "Ödeme henüz ulaşmadı. Sunucu her dakika kontrol ediyor — erişim otomatik açılacak.",
+  "m_telegram": "Bottaki Telegram Yıldızları",
+  "tg_text": "Botumuzda Yıldızlarla ödeme yapmak ve bakiye yüklemek için Telegram’ı bağlayın.",
+  "tg_link": "Telegram’ı bağla",
+  "tg_linked": "Telegram bağlı — satın alma ve bakiye yükleme botta.",
+  "tg_open": "Botu aç",
+  "tg_unlink": "Bağlantıyı kaldır"
  },
  "zh": {
   "tagline": "音乐游戏",
@@ -1303,6 +1351,12 @@
   "btn_i_paid": "我已付款",
   "card_after": "我们会核对转账并为你开通，通常在几小时内完成。",
   "btn_check_payment": "检查付款",
-  "msg_notyet": "尚未收到付款。服务器每分钟自动检查一次，到账后会自动开通。"
+  "msg_notyet": "尚未收到付款。服务器每分钟自动检查一次，到账后会自动开通。",
+  "m_telegram": "在机器人中用 Telegram 星星支付",
+  "tg_text": "绑定 Telegram，即可在我们的机器人中用星星付款和充值余额。",
+  "tg_link": "绑定 Telegram",
+  "tg_linked": "Telegram 已绑定，可在机器人中购买和充值。",
+  "tg_open": "打开机器人",
+  "tg_unlink": "解除绑定"
  }
 }

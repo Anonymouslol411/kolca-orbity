@@ -7,6 +7,7 @@
 #   duckdns          подключить бесплатный адрес имя.duckdns.org
 #   yoomoney-auth    подключить API ЮMoney (сервер сам проверяет оплаты)
 #   yoomoney-check   проверить связь с ЮMoney и неоплаченные заказы
+#   telegram         подключить платёжного Telegram-бота (оплата звёздами)
 #   add-file ФАЙЛ    добавить exe/apk в раздачу для покупателей «Навсегда»
 #   files            список файлов в раздаче
 #   stats            сколько пользователей и оплат
@@ -14,6 +15,7 @@
 #   restart | stop | start | status | logs
 #   update           скачать новую версию из GitHub и перезапустить
 #   backup           сохранить копию базы в ./backups
+#   bot-logs         журнал Telegram-бота
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -55,7 +57,9 @@ install_docker() {
     say "Устанавливаю Docker"
     apt-get update -y
     apt-get install -y ca-certificates curl
-    curl -fsSL https://get.docker.com | sh
+    # на старых Ubuntu (20.04) скрипт падает на пакете docker-model-plugin — ставим без него
+    curl -fsSL https://get.docker.com | sh || apt-get install -y \
+      docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
   fi
   systemctl enable --now docker >/dev/null 2>&1 || true
   docker compose version >/dev/null 2>&1 || apt-get install -y docker-compose-plugin
@@ -132,7 +136,22 @@ configure() {
     ask "Имя получателя, как его покажет банк (например Иван И.)" "$(env_get CARD_HOLDER)"; env_set CARD_HOLDER "$REPLY"
     ask "Банк" "$(env_get CARD_BANK)"; env_set CARD_BANK "$REPLY"
   fi
+  telegram_questions
   chmod 600 .env
+}
+
+telegram_questions() {
+  echo; echo "${BOLD}Telegram-бот${NC} — оплата звёздами Telegram: покупатель покупает звёзды в Telegram за рубли и платит ими в боте."
+  echo "  1) Напишите @BotFather → /newbot → придумайте имя → он пришлёт токен вида 123456:ABC..."
+  echo "  2) Свой Telegram ID (для уведомлений об оплатах и возвратов) покажет бот @userinfobot."
+  ask_secret TG_BOT_TOKEN "Токен бота (пусто — без бота)"
+  if [ -n "$(env_get TG_BOT_TOKEN)" ]; then
+    ask "Сколько рублей засчитывать за 1 звезду" "$(env_get TG_STAR_RUB || true)"
+    [ -z "$REPLY" ] && REPLY="1.5"
+    env_set TG_STAR_RUB "$(echo "${REPLY//,/.}" | tr -cd '0-9.')"
+    ask "Ваш Telegram ID (пусто — без уведомлений)" "$(env_get TG_ADMIN_ID || true)"; env_set TG_ADMIN_ID "${REPLY//[^0-9]/}"
+  fi
+  return 0
 }
 
 admin_password() {
@@ -241,6 +260,17 @@ case "$cmd" in
     ;;
   duckdns-update) duckdns_update >/dev/null || true ;;
   yoomoney-check) need_root "$cmd"; dc exec -T web python app.py yoomoney-check ;;
+  telegram)
+    need_root "$cmd"
+    [ -f .env ] || die "сначала установите сайт: sudo bash manage.sh install"
+    telegram_questions
+    chmod 600 .env
+    dc up -d --build --force-recreate
+    sleep 5
+    dc logs --tail=5 bot
+    say "Готово. Откройте бота в Telegram и нажмите «Старт»; на сайте в «Аккаунте» появится «Привязать Telegram»."
+    ;;
+  bot-logs) need_root "$cmd"; dc logs --tail=200 -f bot ;;
   add-file)
     need_root "$cmd"; f="${2:-}"; [ -f "$f" ] || die "укажите путь к файлу: sudo bash manage.sh add-file Kolca.exe"
     name="$(basename "$f")"
@@ -270,6 +300,6 @@ case "$cmd" in
     say "Копия базы: $f"
     ;;
   *)
-    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 esac

@@ -42,6 +42,26 @@ services:
     logging:
       options: {max-size: "10m", max-file: "5"}
 
+  bot:
+    build:
+      context: ..
+      dockerfile: site/Dockerfile
+    env_file: .env
+    command: ["python", "bot.py"]
+    volumes:
+      - sitedata:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    depends_on:
+      - web
+    logging:
+      options: {max-size: "10m", max-file: "5"}
+
   caddy:
     image: caddy:2
     env_file: .env
