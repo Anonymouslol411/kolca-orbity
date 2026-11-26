@@ -1,7 +1,8 @@
 """Платёжный Telegram-бот сайта «Кольца и Орбиты».
 
-Принимает оплату звёздами Telegram (валюта XTR): покупатель платит рублями, покупая звёзды
-в самом Telegram, а бот засчитывает покупку или пополняет баланс аккаунта на сайте.
+Пополняет баланс аккаунта звёздами Telegram (валюта XTR): покупатель покупает звёзды в Telegram
+за рубли и платит ими в боте, а подписку потом оплачивает балансом на сайте.
+Счета на покупки, выставленные раньше, по-прежнему засчитываются.
 Проверка оплаты — на сервере: деньги засчитываются только по событию successful_payment,
 которое приходит от Telegram по защищённому соединению; сумма, валюта и заказ сверяются с базой.
 
@@ -113,15 +114,12 @@ def show_menu(con, chat_id, u):
     if u['banned']:
         access = '⛔ аккаунт заблокирован'
     rows = []
-    if not u['lifetime'] and not u['banned']:
-        for p in ('month', 'forever'):
-            if p in PRODUCTS:
-                rows.append([{'text': f'{TITLES[p]} — {stars_price(PRODUCTS[p]["price"])} ⭐', 'callback_data': f'buy:{p}'}])
     if not u['banned']:
-        rows.append([{'text': '💰 Пополнить баланс', 'callback_data': 'topup'}])
+        rows += [[{'text': f'{n} ⭐ → {fmt_rub(n * TG_STAR_RUB)}', 'callback_data': f'top:{n}'}] for n in TG_TOPUP_PACKS]
     rows.append([{'text': '🔄 Обновить', 'callback_data': 'menu'}] + site_button())
     send(chat_id, f'🎵 <b>{esc(SITE_NAME)}</b>\n\nАккаунт: {esc(mask_email(u["email"]))}\nДоступ: {access}\n'
-                  f'Баланс: {fmt_rub(u["balance"])}\n\nОплата — звёздами Telegram ⭐ (их можно купить в Telegram за рубли).',
+                  f'Баланс: {fmt_rub(u["balance"])}\n\nЗдесь можно пополнить баланс звёздами Telegram ⭐ '
+                  f'(1 ⭐ = {fmt_rub(TG_STAR_RUB)}). Подписку оплачивайте балансом на сайте в разделе «Цены».',
          rows)
 
 
@@ -135,16 +133,6 @@ def show_topup(chat_id):
 def send_invoice(chat_id, title, description, payload, stars):
     api('sendInvoice', chat_id=chat_id, title=title[:32], description=description[:255], payload=payload,
         currency='XTR', prices=[{'label': title[:32], 'amount': stars}])
-
-
-def invoice_product(con, chat_id, u, product):
-    if product not in PRODUCTS or u['banned']:
-        return
-    if u['lifetime']:
-        send(chat_id, 'У вас уже есть «Навсегда» — покупать ничего не нужно 🙂')
-        return
-    oid = new_order(con, u['id'], product, 'telegram')
-    send_invoice(chat_id, TITLES[product], DESCR[product], f'o:{oid}', stars_price(PRODUCTS[product]['price']))
 
 
 def invoice_topup(con, chat_id, u, stars):
@@ -309,11 +297,9 @@ def on_message(con, msg):
     cmd, _, arg = text.partition(' ')
     cmd = cmd.split('@')[0].lower()
     if cmd == '/start' and re.fullmatch(r'[A-Za-z0-9_\-]{10,64}', arg.strip()):
-        u, product = link_account(con, chat_id, tg_id, arg.strip())
+        u, _ = link_account(con, chat_id, tg_id, arg.strip())
         if u:
             show_menu(con, chat_id, u)
-            if product:
-                invoice_product(con, chat_id, u, product)
         return
     if cmd == '/paysupport':
         contact = f'на почту {esc(SUPPORT_EMAIL)}' if SUPPORT_EMAIL else 'администратору сайта'
@@ -344,9 +330,7 @@ def on_callback(con, cq):
     u = user_by_tg(con, tg_id)
     if not u or data == 'menu':
         show_menu(con, chat_id, u)
-    elif data.startswith('buy:'):
-        invoice_product(con, chat_id, u, data[4:])
-    elif data == 'topup':
+    elif data == 'topup' or data.startswith('buy:'):      # покупки в боте убраны — только пополнение
         show_topup(chat_id)
     elif re.fullmatch(r'top:\d{1,6}', data):
         invoice_topup(con, chat_id, u, int(data[4:]))

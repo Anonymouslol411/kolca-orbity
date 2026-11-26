@@ -55,6 +55,9 @@ SECRET_KEY = env('SECRET_KEY') or ''
 BASE_URL = (env('BASE_URL') or 'http://localhost:8000').rstrip('/')
 DATA_DIR = Path(env('DATA_DIR') or HERE / 'data')
 DOWNLOADS_DIR = DATA_DIR / 'downloads'
+COVERS_DIR = DATA_DIR / 'covers'
+COVER_EXT = {b'\x89PNG': '.png', b'\xff\xd8\xff': '.jpg', b'RIFF': '.webp'}
+COVER_LIMIT = 5 * 1024 * 1024
 GAMES_DIR = Path(env('GAMES_DIR') or HERE.parent / 'web')
 SITE_NAME = env('SITE_NAME') or 'Kolca & Orbity'
 SUPPORT_EMAIL = env('SUPPORT_EMAIL') or ''
@@ -125,8 +128,6 @@ def methods_available():
         m += ['yoomoney_card', 'yoomoney_wallet']
     if CARD_NUMBER:
         m.append('card')
-    if tg_bot_username():
-        m.append('telegram')
     return m
 
 
@@ -167,6 +168,9 @@ CREATE TABLE IF NOT EXISTS admin_log (
 CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS attempts_key ON attempts(key, ts);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS games (
+    id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'soon',
+    url TEXT, cover TEXT, hue INTEGER NOT NULL DEFAULT 200, sort INTEGER NOT NULL DEFAULT 100, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pending_regs (
     email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, lang TEXT, code_hash TEXT NOT NULL,
     expires INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, sent_at INTEGER NOT NULL);
@@ -306,7 +310,7 @@ def setup_request():
     g.lang = pick_lang()
     g.user = None
     # большие запросы разрешены только для загрузки файлов в админке
-    if (request.content_length or 0) > SMALL_REQUEST and request.endpoint != 'admin.downloads':
+    if (request.content_length or 0) > SMALL_REQUEST and request.endpoint not in ('admin.downloads', 'admin.games'):
         abort(413)
     uid = session.get('uid')
     if uid:
@@ -385,7 +389,26 @@ def start_session(u):
 # ---------------------------------------------------------------- страницы
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', extra=catalog(db())[:6])
+
+
+def catalog(con):
+    """Игры каталога, добавленные в админке (кроме «Колец» и «Орбит», которые встроены)."""
+    return con.execute('SELECT * FROM games ORDER BY sort, id').fetchall()
+
+
+@app.route('/games')
+def games_page():
+    return render_template('games.html', extra=catalog(db()))
+
+
+@app.route('/covers/<name>')
+def cover_file(name):
+    if name != secure_filename(name) or Path(name).suffix.lower() not in set(COVER_EXT.values()):
+        abort(404)
+    resp = send_from_directory(COVERS_DIR, name)
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 @app.route('/pricing')
@@ -797,8 +820,6 @@ def buy():
 
     if method not in methods_available():
         return redirect(url_for('pricing', unavailable=1))
-    if method == 'telegram':      # оплата идёт в боте: даём одноразовую ссылку, бот сам выставит счёт
-        return redirect(tg_link_url(con, g.user['id'], product))
     oid = new_order(con, g.user['id'], product, method)
     return redirect(url_for('pay', oid=oid))
 
@@ -1110,6 +1131,34 @@ def parse_amount(s):
     return v if 0 < v <= 10_000_000 else None
 
 
+def delete_user(con, u):
+    uid = u['id']
+    con.execute('DELETE FROM balance_log WHERE user_id=?', (uid,))
+    con.execute('DELETE FROM tg_links WHERE user_id=?', (uid,))
+    con.execute('UPDATE orders SET user_id=NULL WHERE user_id=?', (uid,))     # оплаты остаются в истории
+    con.execute('DELETE FROM users WHERE id=?', (uid,))
+    con.commit()
+    admin_log(con, 'Удалил аккаунт', u['email'])
+
+
+@admin.route('/users/delete', methods=['POST'])
+@admin_required
+def users_delete():
+    """Удаление прямо из списка: один аккаунт (кнопка в строке) или отмеченные галочками."""
+    check_csrf()
+    con = db()
+    if request.form.get('confirm') != 'yes':
+        return redirect(url_for('admin.users', msg='need_confirm'))
+    ids = [int(x) for x in request.form.getlist('ids') if x.isdigit()][:100]
+    n = 0
+    for uid in ids:
+        u = con.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+        if u:
+            delete_user(con, u)
+            n += 1
+    return redirect(url_for('admin.users', msg='deleted', n=n))
+
+
 @admin.route('/user/<int:uid>/<action>', methods=['POST'])
 @admin_required
 def user_action(uid, action):
@@ -1165,11 +1214,7 @@ def user_action(uid, action):
     elif action == 'delete':
         if (request.form.get('confirm') or '').strip().lower() != u['email']:
             return redirect(url_for('admin.user', uid=uid, msg='bad_confirm'))
-        con.execute('DELETE FROM balance_log WHERE user_id=?', (uid,))
-        con.execute('UPDATE orders SET user_id=NULL WHERE user_id=?', (uid,))     # оплаты остаются в истории
-        con.execute('DELETE FROM users WHERE id=?', (uid,))
-        con.commit()
-        admin_log(con, 'Удалил аккаунт', u['email'])
+        delete_user(con, u)
         return redirect(url_for('admin.users', msg='deleted'))
     else:
         abort(400)
@@ -1204,6 +1249,83 @@ def order_action(oid, action):
     else:
         abort(400)
     return redirect(url_for('admin.orders', msg=action))
+
+
+def save_cover(f, gid):
+    """Сохранить обложку игры (PNG/JPG/WebP до 5 МБ, тип проверяется по содержимому)."""
+    data = f.read(COVER_LIMIT + 1)
+    if not data or len(data) > COVER_LIMIT:
+        return None
+    ext = next((e for magic, e in COVER_EXT.items() if data.startswith(magic)), None)
+    if not ext or (ext == '.webp' and data[8:12] != b'WEBP'):
+        return None
+    COVERS_DIR.mkdir(parents=True, exist_ok=True)
+    name = f'g{gid}-{secrets.token_hex(4)}{ext}'
+    (COVERS_DIR / name).write_bytes(data)
+    return name
+
+
+def drop_cover(name):
+    if name and name == secure_filename(name) and (COVERS_DIR / name).is_file():
+        (COVERS_DIR / name).unlink()
+
+
+@admin.route('/games', methods=['GET', 'POST'])
+@admin_required
+def games():
+    con = db()
+    msg = request.args.get('msg')
+    if request.method == 'POST':
+        check_csrf()
+        act = request.form.get('action')
+        gid = int(request.form.get('id') or 0) if (request.form.get('id') or '0').isdigit() else 0
+        row = con.execute('SELECT * FROM games WHERE id=?', (gid,)).fetchone() if gid else None
+        if act == 'delete' and row:
+            drop_cover(row['cover'])
+            con.execute('DELETE FROM games WHERE id=?', (gid,))
+            con.commit()
+            admin_log(con, 'Удалил игру', '', row['title'])
+            return redirect(url_for('admin.games', msg='deleted'))
+        if act == 'save':
+            title = (request.form.get('title') or '').strip()[:60]
+            desc = (request.form.get('description') or '').strip()[:300]
+            status = request.form.get('status') if request.form.get('status') in ('soon', 'live') else 'soon'
+            url = (request.form.get('url') or '').strip()[:300]
+            if url and not re.fullmatch(r'https?://[^\s<>"]+', url):
+                return redirect(url_for('admin.games', msg='bad_url'))
+            try:
+                hue = int(request.form.get('hue') or 200) % 360
+                sort = max(0, min(9999, int(request.form.get('sort') or 100)))
+            except ValueError:
+                hue, sort = 200, 100
+            if not title:
+                return redirect(url_for('admin.games', msg='no_title'))
+            if row:
+                con.execute('UPDATE games SET title=?, description=?, status=?, url=?, hue=?, sort=? WHERE id=?',
+                            (title, desc, status, url or None, hue, sort, gid))
+            else:
+                gid = con.execute('INSERT INTO games (title, description, status, url, hue, sort, created_at) VALUES (?,?,?,?,?,?,?)',
+                                  (title, desc, status, url or None, hue, sort, now())).lastrowid
+            con.commit()
+            f = request.files.get('cover')
+            if f and f.filename:
+                name = save_cover(f, gid)
+                if not name:
+                    return redirect(url_for('admin.games', msg='bad_cover'))
+                old = con.execute('SELECT cover FROM games WHERE id=?', (gid,)).fetchone()['cover']
+                con.execute('UPDATE games SET cover=? WHERE id=?', (name, gid))
+                con.commit()
+                drop_cover(old)
+            elif request.form.get('drop_cover') and row:
+                drop_cover(row['cover'])
+                con.execute('UPDATE games SET cover=NULL WHERE id=?', (gid,))
+                con.commit()
+            admin_log(con, 'Изменил игру' if row else 'Добавил игру', '', title)
+            return redirect(url_for('admin.games', msg='saved'))
+        abort(400)
+    edit = request.args.get('edit', '')
+    cur = con.execute('SELECT * FROM games WHERE id=?', (int(edit),)).fetchone() if edit.isdigit() else None
+    return render_template('admin_games.html', games=catalog(con), cur=cur, msg=msg)
 
 
 @admin.route('/downloads', methods=['GET', 'POST'])
