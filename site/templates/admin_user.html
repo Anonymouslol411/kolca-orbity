@@ -22,7 +22,7 @@
       {% elif (u.paid_until or 0) > now %}<p><b>Месяц онлайн</b> до {{ fmt_date(u.paid_until, True) }}</p>
       {% elif (u.trial_end or 0) > now %}<p><b>Пробный период</b> до {{ fmt_date(u.trial_end, True) }}</p>
       {% else %}<p><b>Нет доступа</b></p>{% endif %}
-      <p class="muted">ID {{ u.id }} · регистрация {{ fmt_date(u.created_at, True) }} · язык {{ u.lang or '—' }}</p>
+      <p class="muted">ID {{ u.id }} · регистрация {{ fmt_date(u.created_at, True) }} · язык {{ u.lang or '—' }}{% if u.tg_id %} · Telegram ID {{ u.tg_id }}{% endif %}</p>
       {% if u.banned %}<p class="warn-text">Заблокирован{% if u.ban_reason %}: {{ u.ban_reason }}{% endif %}</p>{% endif %}
 
       <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='add_days') }}" class="inline-form">

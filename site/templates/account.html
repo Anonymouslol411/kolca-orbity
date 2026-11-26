@@ -39,6 +39,28 @@
     <p class="muted">{{ t('balance_note') }}</p>
   </div>
 
+  {% if tg_bot %}
+  <div class="card">
+    <h3>Telegram</h3>
+    {% if user.tg_id %}
+      <p>{{ t('tg_linked') }}</p>
+      <div class="cta-row left">
+        <a class="btn" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_open') }}</a>
+        <form method="post" action="{{ url_for('account_telegram') }}" class="inline-form">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="unlink">
+          <button class="link-btn" type="submit">{{ t('tg_unlink') }}</button>
+        </form>
+      </div>
+    {% else %}
+      <p class="muted">{{ t('tg_text') }}</p>
+      <form method="post" action="{{ url_for('account_telegram') }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn" type="submit">{{ t('tg_link') }}</button>
+      </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if orders %}
   <div class="card">
     <h3>{{ t('orders_title') }}</h3>
