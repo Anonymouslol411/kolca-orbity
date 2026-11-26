@@ -41,7 +41,7 @@
         <button class="btn wide" type="submit">{{ t('btn_login') }}</button>
       </form>
       <p class="muted"><a href="{{ url_for('forgot') }}">{{ t('forgot_link') }}</a></p>
-      <p class="muted">{{ t('no_account') }} <a href="{{ url_for('register') }}">{{ t('nav_register') }}</a></p>
+      {% if registration_open %}<p class="muted">{{ t('no_account') }} <a href="{{ url_for('register') }}">{{ t('nav_register') }}</a></p>{% endif %}
 
     {% elif mode == 'forgot' %}
       {% if sent %}
