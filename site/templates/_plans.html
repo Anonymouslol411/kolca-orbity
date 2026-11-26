@@ -26,20 +26,7 @@
     {% if user and code == 'forever' and user.lifetime %}
       <div class="note ok">{{ t('owned') }}</div>
     {% elif user %}
-      <form method="post" action="{{ url_for('buy') }}">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <input type="hidden" name="product" value="{{ code }}">
-        <fieldset class="methods">
-          <legend>{{ t('method_label') }}</legend>
-          {% for m in methods %}
-            <label><input type="radio" name="method" value="{{ m }}" {% if loop.first %}checked{% endif %}> {{ t('m_' + m) }}</label>
-          {% endfor %}
-          {% if user.balance >= p.price %}
-            <label><input type="radio" name="method" value="balance" {% if not methods %}checked{% endif %}> {{ t('m_balance', balance=fmt_rub(user.balance)) }}</label>
-          {% endif %}
-        </fieldset>
-        <button class="btn big wide" type="submit" {% if not methods and user.balance < p.price %}disabled{% endif %}>{{ t('btn_buy', price=fmt_rub(p.price)) }}</button>
-      </form>
+      {% with product=code, price=p.price %}{% include '_buy.html' %}{% endwith %}
     {% else %}
       <a class="btn big wide" href="{{ url_for('register') }}">{{ t('btn_buy', price=fmt_rub(p.price)) }}</a>
     {% endif %}
@@ -47,4 +34,4 @@
   {% endfor %}
 </div>
 <p class="fine plans-note">{{ t('games_sub_note') }} {{ t('pay_note') }}</p>
-{% if not methods %}<p class="fine warn center">{{ t('pay_unavailable') }}</p>{% endif %}
+

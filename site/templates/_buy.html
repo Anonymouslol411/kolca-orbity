@@ -1,0 +1,22 @@
+{# Покупка с баланса; если денег не хватает — пополнение в Telegram-боте. Параметры: product, price #}
+{% if user.balance >= price %}
+  <form method="post" action="{{ url_for('buy') }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="product" value="{{ product }}">
+    <input type="hidden" name="method" value="balance">
+    <p class="fine">{{ t('m_balance', balance=fmt_rub(user.balance)) }}</p>
+    <button class="btn big wide" type="submit">{{ t('btn_buy', price=fmt_rub(price)) }}</button>
+  </form>
+{% else %}
+  <p class="fine">{{ t('need_topup', balance=fmt_rub(user.balance), missing=fmt_rub(price - user.balance)) }}</p>
+  {% if tg_bot and user.tg_id %}
+    <a class="btn big wide" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_topup') }}</a>
+  {% elif tg_bot %}
+    <form method="post" action="{{ url_for('account_telegram') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn big wide" type="submit">{{ t('tg_topup') }}</button>
+    </form>
+  {% else %}
+    <p class="fine warn">{{ t('pay_unavailable') }}</p>
+  {% endif %}
+{% endif %}

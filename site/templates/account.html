@@ -32,7 +32,9 @@
   <div class="card">
     <h3>{{ t('balance') }}: {{ fmt_rub(user.balance) }}</h3>
     <p class="muted">{{ t('balance_note') }}</p>
-    {% if tg_bot and user.tg_id %}<a class="btn small ghost" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_topup') }}</a>{% endif %}
+    {% if tg_bot and user.tg_id %}<a class="btn small" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_topup') }}</a>
+    {% elif tg_bot %}<form method="post" action="{{ url_for('account_telegram') }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn small" type="submit">{{ t('tg_topup') }}</button></form>{% endif %}
   </div>
 
   {% if tg_bot %}

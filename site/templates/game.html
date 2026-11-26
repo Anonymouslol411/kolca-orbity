@@ -30,23 +30,8 @@
           <div class="plan-price"><span class="amount">{{ fmt_rub(g_.price) }}</span><span class="per">{{ t('label_once') }}</span></div>
           <p class="muted">{{ t('game_once') }}</p>
           {% if products.forever %}<p class="fine">{{ t('game_or_forever', price=fmt_rub(products.forever.price)) }} <a href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a></p>{% endif %}
-          {% if user and not methods and user.balance < g_.price %}
-            <div class="note warn">{{ t('pay_unavailable') }}</div>
-          {% elif user %}
-          <form method="post" action="{{ url_for('buy') }}">
-            <input type="hidden" name="csrf" value="{{ csrf }}">
-            <input type="hidden" name="product" value="game:{{ g_.id }}">
-            <fieldset class="methods">
-              <legend>{{ t('method_label') }}</legend>
-              {% for m in methods %}
-                <label><input type="radio" name="method" value="{{ m }}" {% if loop.first %}checked{% endif %}> {{ t('m_' + m) }}</label>
-              {% endfor %}
-              {% if user.balance >= g_.price %}
-                <label><input type="radio" name="method" value="balance" {% if not methods %}checked{% endif %}> {{ t('m_balance', balance=fmt_rub(user.balance)) }}</label>
-              {% endif %}
-            </fieldset>
-            <button class="btn big" type="submit" {% if not methods and user.balance < g_.price %}disabled{% endif %}>{{ t('btn_buy', price=fmt_rub(g_.price)) }}</button>
-          </form>
+          {% if user %}
+            {% with product='game:%d' % g_.id, price=g_.price %}{% include '_buy.html' %}{% endwith %}
           {% else %}
             <a class="btn big" href="{{ url_for('register') }}">{{ t('btn_buy', price=fmt_rub(g_.price)) }}</a>
             <p class="fine">{{ t('game_need_account') }} <a href="{{ url_for('login') }}">{{ t('nav_login') }}</a></p>
