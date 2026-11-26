@@ -252,13 +252,19 @@ def product_price(con, product):
 
 
 def owns_game(con, user, gid):
-    return bool(user) and not user['banned'] and con.execute(
-        'SELECT 1 FROM user_games WHERE user_id=? AND game_id=?', (user['id'], gid)).fetchone() is not None
+    """Есть ли у пользователя игра из каталога: купил её отдельно или у него «Навсегда» (открывает все игры)."""
+    if not user or user['banned']:
+        return False
+    if user['lifetime']:
+        return True
+    return con.execute('SELECT 1 FROM user_games WHERE user_id=? AND game_id=?', (user['id'], gid)).fetchone() is not None
 
 
 def owned_games(con, user):
     if not user:
         return []
+    if user['lifetime'] and not user['banned']:     # «Навсегда» — все продаваемые игры каталога
+        return con.execute("SELECT * FROM games WHERE status='paid' ORDER BY sort, id").fetchall()
     return con.execute('SELECT g.* FROM games g JOIN user_games ug ON ug.game_id=g.id WHERE ug.user_id=? ORDER BY g.sort, g.id',
                        (user['id'],)).fetchall()
 
@@ -1191,7 +1197,7 @@ def user(uid):
         abort(404)
     return render_template('admin_user.html', u=u, msg=request.args.get('msg'),
                            sale_games=con.execute("SELECT * FROM games WHERE status='paid' ORDER BY sort, id").fetchall(),
-                           mine={r['id'] for r in owned_games(con, u)},
+                           mine={r['game_id'] for r in con.execute('SELECT game_id FROM user_games WHERE user_id=?', (uid,))},
                            orders=con.execute('SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,)).fetchall(),
                            balance_log=con.execute('SELECT * FROM balance_log WHERE user_id=? ORDER BY id DESC LIMIT 30', (uid,)).fetchall())
 
