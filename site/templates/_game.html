@@ -19,14 +19,15 @@
 <article class="game-item {% if g.status == 'soon' %}soon{% endif %}">
   {% if g.cover %}<div class="disc cover-img"><img src="{{ url_for('cover_file', name=g.cover) }}" alt="" loading="lazy"></div>
   {% else %}<div class="disc disc-hue" style="--h: {{ g.hue }}" aria-hidden="true"></div>{% endif %}
-  <h3>{% if g.status == 'paid' %}<a class="plain" href="{{ url_for('game_page', gid=g.id) }}">{{ g.title }}</a>{% else %}{{ g.title }}{% endif %}</h3>
+  <h3><a class="plain" href="{{ url_for('game_page', gid=g.id) }}">{{ g.title }}</a></h3>
   <p>{{ g.description }}</p>
   {% if g.status == 'soon' %}
     <span class="pill">{{ t('games_soon') }}</span>
   {% elif g.status == 'paid' %}
     <a class="btn small" href="{{ url_for('game_page', gid=g.id) }}">{{ fmt_rub(g.price) }}</a>
   {% elif g.url %}
-    <a class="btn small ghost" href="{{ g.url }}" target="_blank" rel="noopener noreferrer">{{ t('games_open') }}</a>
+    {% set is_file = g.url.lower().endswith(('.exe', '.zip', '.apk')) %}
+    <a class="btn small ghost" href="{{ g.url if is_file else url_for('game_page', gid=g.id) }}" rel="noopener noreferrer">{{ t('games_free_dl') if is_file else t('games_open') }}</a>
   {% endif %}
 </article>
 {% endmacro %}

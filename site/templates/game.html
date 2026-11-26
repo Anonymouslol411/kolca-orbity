@@ -14,7 +14,15 @@
       {% if request.args.get('toomany') %}<div class="note warn">{{ t('err_too_many') }}</div>{% endif %}
 
       <div class="buy-box">
-        {% if owned %}
+        {% if g_.status == 'soon' %}
+          <span class="pill">{{ t('games_soon') }}</span>
+        {% elif g_.status == 'live' %}
+          {% if g_.url %}
+          {% set is_file = g_.url.lower().endswith(('.exe', '.zip', '.apk')) %}
+          <a class="btn big" href="{{ g_.url }}" rel="noopener noreferrer" {% if not is_file %}target="_blank"{% endif %}>{{ t('games_free_dl') if is_file else t('games_open') }}</a>
+          <p class="fine">{{ t('games_free_note') }}</p>
+          {% endif %}
+        {% elif owned %}
           <p class="big-status">{{ t('game_owned') }}</p>
           {% if g_.file %}<a class="btn big" href="{{ url_for('download_file', name=g_.file) }}">{{ t('download_btn') }}</a>
           {% else %}<p class="muted">{{ t('game_no_file') }}</p>{% endif %}
@@ -47,5 +55,10 @@
       </div>
     </div>
   </div>
+  {% if shots %}
+  <div class="gallery">
+    {% for sh in shots %}<a href="{{ url_for('cover_file', name=sh) }}" target="_blank"><img src="{{ url_for('cover_file', name=sh) }}" alt="" loading="lazy"></a>{% endfor %}
+  </div>
+  {% endif %}
 </section>
 {% endblock %}
