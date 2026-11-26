@@ -19,7 +19,6 @@
     {% set ep = request.endpoint %}
     <a href="{{ url_for('games_page') }}" {% if ep == 'games_page' %}class="on"{% endif %}>{{ t('nav_games') }}</a>
     <a href="{{ url_for('downloads') }}" {% if ep == 'downloads' %}class="on"{% endif %}>{{ t('nav_downloads') }}</a>
-    {% if user %}<a href="{{ url_for('account') }}" {% if ep == 'account' %}class="on"{% endif %}>{{ t('nav_account') }}</a>{% endif %}
     <a class="btn small" href="{{ url_for('support') }}">{{ t('nav_support') }}</a>
     <form class="picker" method="get" action="">
       <label class="sr" for="lang-select">{{ t('language') }}</label>
