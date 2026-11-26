@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Орбиты</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;user-select:none;-webkit-user-select:none}
+  canvas{display:block;width:100vw;height:100vh}
+  .hidden{display:none!important}
+  .overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:16px;
+    background:rgba(4,2,20,.74);text-align:center;padding:28px 22px;box-sizing:border-box;overflow-y:auto}
+  .overlay > :first-child{margin-top:auto} .overlay > :last-child{margin-bottom:auto}
+  h1{margin:0;font-size:42px;letter-spacing:3px;color:#fff;text-shadow:0 0 18px #7d5cff,0 0 40px #4a2bff}
+  p{margin:0;max-width:340px;line-height:1.45;color:#d2cdf2;font-size:15px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  button,.filebtn{font:inherit;font-size:16px;color:#fff;background:#1a1440;border:1px solid #3d3380;border-radius:12px;
+    padding:10px 16px;cursor:pointer}
+  button.sel{background:#5b3dff;border-color:#9a86ff}
+  button.big{font-size:20px;padding:14px 44px;background:linear-gradient(90deg,#5b3dff,#b14dff);border:0;
+    box-shadow:0 0 24px rgba(140,90,255,.6)}
+  .label{font-size:12px;color:#9b93c9;text-transform:uppercase;letter-spacing:1.2px}
+  .track{font-size:13px;color:#d2cdf2;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:0;right:0;display:flex;justify-content:space-between;
+    align-items:flex-start;padding:0 12px;pointer-events:none}
+  #hud .btns{display:flex;gap:8px;pointer-events:auto}
+  #hud button{padding:6px 12px;font-size:14px;background:rgba(26,20,64,.7)}
+  #score{font-size:22px;font-weight:700;text-shadow:0 0 10px #7d5cff}
+  #combo{font-size:13px;color:#cfc6ff}
+  #judge{position:fixed;left:0;right:0;top:22%;text-align:center;font-size:30px;font-weight:800;
+    letter-spacing:2px;pointer-events:none;opacity:0;transition:opacity .25s}
+  #result{font-size:18px;line-height:1.6}
+</style>
+</head>
+<body>
+<audio id="music" loop preload="auto"></audio>
+<canvas id="c"></canvas>
+
+<div id="hud" class="hidden">
+  <div><div id="score">0</div><div id="combo"></div></div>
+  <div class="btns"><button id="muteBtn">🔊</button><button id="menuBtn">☰</button></div>
+</div>
+<div id="judge"></div>
+
+<div id="start" class="overlay">
+  <h1>ОРБИТЫ</h1>
+  <p>Точки бегут по кольцам с разной скоростью и закручиваются в спираль. Каждые несколько секунд они выстраиваются в одну линию, и в этот момент бьёт луч. Каждое кольцо — свой голос музыки: с каждым новым кольцом трек звучит полнее. Светящаяся стрелка обходит круг и зажигает ноты на кольцах — с треком они стоят ровно там, где звучат ноты песни.</p>
+  <p><b>Тапни ровно в момент, когда линия собралась.</b> Чем точнее, тем больше очков и комбо.</p>
+  <div class="label">Режим</div>
+  <div class="row" id="modeRow">
+    <button data-m="play" class="sel">Игра — тапай</button><button data-m="watch">Смотреть</button>
+  </div>
+  <div class="label">Темп</div>
+  <div class="row" id="tempoRow">
+    <button data-t="4.8">Спокойно</button><button data-t="3.6" class="sel">Средне</button><button data-t="2.6">Быстро</button>
+  </div>
+  <div class="label">Музыка</div>
+  <div class="row">
+    <label class="filebtn">🎵 Выбрать трек (mp3 и др.)<input type="file" id="file" accept="audio/*,.mp3,audio/mpeg,audio/mp3,.m4a,.aac,.wav,.ogg,.oga,.opus,.flac,.webm" hidden></label>
+    <button id="noMusic" class="hidden">✕</button>
+  </div>
+  <div id="trackName" class="track">Без трека — кольца играют мелодию сами</div>
+  <p style="font-size:13px">С треком линии собираются точно на сильные доли музыки, а кольца вспыхивают на своих нотах: внутреннее — на басу, внешние — на высоких.</p>
+  <div class="row"><button id="notesBtn">Ноты поверх трека</button></div>
+  <button class="big" id="go">Старт</button>
+  <div id="best" class="label"></div>
+</div>
+
+<div id="end" class="overlay hidden">
+  <h1>ФИНАЛ</h1>
+  <div id="result"></div>
+  <button class="big" id="again">Ещё раз</button>
+  <button id="toMenu">Меню</button>
+</div>
+
+<script>
+(() => {
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let W, H, DPR, cx, cy, S;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  cx = W/2; cy = H/2; S = Math.min(W,H)/400;
+}
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+};
+const $ = id => document.getElementById(id);
+
+// ---------- audio ----------
+let bandGains=[];
+let AC=null, master=null, analyser=null, freqData=null, musicSrc=null, musicGain=null;
+let muted=false, hasMusic=false, notesWithMusic=false;
+const PENTA=[0,2,4,7,9,12,14,16,19,21];
+function audio(){
+  if (!AC){ try{
+    AC = new (window.AudioContext||window.webkitAudioContext)();
+    // лимитер на выходе, чтобы при всех 8 партиях не было перегруза
+    const lim = AC.createDynamicsCompressor();
+    lim.threshold.value = -10; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.2;
+    master = AC.createGain(); master.gain.value = muted ? 0 : 1; master.connect(lim); lim.connect(AC.destination);
+    analyser = AC.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.5;
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+  }catch(e){} }
+  // iPhone: звук игры не должен глушиться переключателем «Без звука»
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+  if (AC && AC.state !== 'running' && AC.state !== 'closed') AC.resume().catch(()=>{});
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && AC) AC.resume().catch(()=>{}); });
+document.addEventListener('pointerdown', () => { if (AC && AC.state !== 'running') AC.resume().catch(()=>{}); }, true);
+function setupMusic(){
+  if (!AC || musicSrc) return;
+  const el = $('music');
+  musicSrc = AC.createMediaElementSource(el);
+  musicGain = AC.createGain(); musicGain.gain.value = 0.85;
+  musicSrc.connect(analyser); musicGain.connect(master);
+  // трек делится на 8 полос: каждое кольцо открывает свою
+  bandGains = [];
+  for (let k=0;k<8;k++){
+    const f0 = 60*Math.pow(8000/60, k/8), f1 = 60*Math.pow(8000/60, (k+1)/8);
+    let node = musicSrc;
+    if (k > 0) for (let q=0;q<2;q++){ const hp = AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=f0; hp.Q.value=0.707; node.connect(hp); node = hp; }
+    if (k < 7) for (let q=0;q<2;q++){ const lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=f1; lp.Q.value=0.707; node.connect(lp); node = lp; }
+    const g = AC.createGain(); g.gain.value = 1; node.connect(g); g.connect(musicGain);
+    bandGains.push(g);
+  }
+}
+function tone(freq, dur, type, vol, delay=0){
+  if (!AC || muted) return;
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(master); if (!hasMusic) g.connect(analyser);
+  o.start(t); o.stop(t+dur+0.02);
+}
+function notesOn(){ return !hasMusic || notesWithMusic; }
+// каждое кольцо — один голос со своей нотой
+const VOICES = [
+  { f: 55,    type:'sine',     dur:0.45, vol:0.45, kick:true },  // бочка
+  { f: 110,   type:'triangle', dur:0.5,  vol:0.20 },             // бас A2
+  { f: 220,   type:'sine',     dur:0.9,  vol:0.13 },             // A3
+  { f: 261.6, type:'triangle', dur:0.8,  vol:0.07 },             // C4
+  { f: 329.6, type:'sine',     dur:0.8,  vol:0.11 },             // E4
+  { f: 392.0, type:'sine',     dur:0.7,  vol:0.09 },             // G4
+  { f: 493.9, type:'sine',     dur:0.6,  vol:0.07 },             // B4
+  { f: 659.3, type:'sine',     dur:0.5,  vol:0.06 },             // E5
+];
+function playVoice(k, mul){
+  if (!AC || muted) return;
+  const v = VOICES[k];
+  if (v.kick){
+    const t0 = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    o.frequency.setValueAtTime(150, t0); o.frequency.exponentialRampToValueAtTime(48, t0+0.12);
+    g.gain.setValueAtTime(v.vol*mul, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0+v.dur);
+    o.connect(g); g.connect(master); if (!hasMusic) g.connect(analyser);
+    o.start(t0); o.stop(t0+v.dur+0.02); return;
+  }
+  tone(v.f, v.dur, v.type, v.vol*mul);
+}
+// ---------- встроенный трек: каждое кольцо — отдельная партия ----------
+let noiseBuf = null;
+function noise(){
+  if (!noiseBuf){ noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate); const d = noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1; }
+  return noiseBuf;
+}
+const midi = m => 440*Math.pow(2, (m-69)/12);
+function env(g, t0, a, peak, dec){ g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(peak, t0+a); g.gain.exponentialRampToValueAtTime(0.0001, t0+a+dec); }
+function synth(type, freq, t0, a, peak, dec, cutoff, detune){
+  const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.value = freq; if (detune) o.detune.value = detune;
+  let node = o;
+  if (cutoff){ const f = AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value = cutoff; o.connect(f); node = f; }
+  env(g, t0, a, peak, dec); node.connect(g); g.connect(master); g.connect(analyser);
+  o.start(t0); o.stop(t0+a+dec+0.05);
+}
+function noiseHit(t0, type, freq, peak, dec, q){
+  const s = AC.createBufferSource(); s.buffer = noise();
+  const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
+  const g = AC.createGain(); env(g, t0, 0.002, peak, dec);
+  s.connect(f).connect(g); g.connect(master); g.connect(analyser); s.start(t0, Math.random()*0.5); s.stop(t0+dec+0.05);
+}
+function playPart(k, ev){
+  if (!AC || muted) return;
+  const t0 = AC.currentTime + 0.005;
+  switch (k){
+    case 0: { // бочка
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.frequency.setValueAtTime(140, t0); o.frequency.exponentialRampToValueAtTime(45, t0+0.13);
+      env(g, t0, 0.003, 0.9, 0.4); o.connect(g); g.connect(master); g.connect(analyser); o.start(t0); o.stop(t0+0.5); break; }
+    case 1: // хлопок
+      noiseHit(t0, 'bandpass', 1400, 0.55, 0.16, 0.8); noiseHit(t0+0.012, 'bandpass', 1900, 0.3, 0.12, 1.2); break;
+    case 2: // хай-хэт
+      noiseHit(t0, 'highpass', 7500, ev.acc ? 0.22 : 0.13, ev.acc ? 0.09 : 0.04); break;
+    case 3: // бас
+      synth('sawtooth', midi(ev.m), t0, 0.005, 0.28, ev.len, 520); synth('sine', midi(ev.m), t0, 0.005, 0.25, ev.len); break;
+    case 4: // аккорд-пэд
+      for (const m of ev.ch){ synth('sawtooth', midi(m), t0, 0.25, 0.045, ev.len, 1300, -7); synth('sawtooth', midi(m), t0, 0.25, 0.045, ev.len, 1300, 7); } break;
+    case 5: // арпеджио
+      synth('square', midi(ev.m), t0, 0.004, 0.06, 0.18, 2600); break;
+    case 6: // мелодия
+      synth('triangle', midi(ev.m), t0, 0.01, 0.2, ev.len); synth('sine', midi(ev.m+12), t0, 0.01, 0.05, ev.len*0.7); break;
+    case 7: // колокольчики
+      synth('sine', midi(ev.m), t0, 0.002, 0.09, 0.9); synth('sine', midi(ev.m)*2.76, t0, 0.002, 0.03, 0.4); break;
+  }
+}
+function ringNote(k, note){
+  if (!notesOn()) return;
+  if (!hasMusic && note && note.ev) playPart(k, note.ev);
+  else playVoice(k, hasMusic ? 0.5 : 0.8);
+}
+function alignSound(K){
+  if (!notesOn()) return;
+  for (let k=0;k<K;k++) playVoice(k, hasMusic ? 0.6 : 1);
+}
+function hitSound(perfect){ tone(perfect?1568:1175, 0.18, 'sine', hasMusic ? 0.07 : 0.12); }
+
+// ---------- анализ ритма трека ----------
+let beats = null, bpm = 0, beatStrength = null, A = null;   // A — моменты выравниваний (сек)
+async function analyzeTrack(file){
+  audio();
+  const buf = await file.arrayBuffer();
+  const ab = await new Promise((res, rej) => {
+    const p = AC.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej);
+  });
+  const sr = ab.sampleRate, len = ab.length;
+  // моно
+  const mono = new Float32Array(len);
+  for (let c=0;c<ab.numberOfChannels;c++){ const d = ab.getChannelData(c); for (let i=0;i<len;i++) mono[i] += d[i]/ab.numberOfChannels; }
+  // низы (бочка/бас) через офлайн-фильтр
+  let low = null;
+  try {
+    const off = new (window.OfflineAudioContext||window.webkitOfflineAudioContext)(1, len, sr);
+    const b = off.createBuffer(1, len, sr); b.copyToChannel ? b.copyToChannel(mono, 0) : b.getChannelData(0).set(mono);
+    const s = off.createBufferSource(); s.buffer = b;
+    const f = off.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 160;
+    s.connect(f).connect(off.destination); s.start();
+    low = (await off.startRendering()).getChannelData(0);
+  } catch(e){ low = null; }
+  const hop = 512, nF = Math.floor(len/hop), hopT = hop/sr;
+  const envF = new Float32Array(nF), envL = new Float32Array(nF);
+  for (let i=0;i<nF;i++){
+    let e=0, el=0; const o=i*hop;
+    for (let j=0;j<hop;j++){ const v=mono[o+j]; e+=v*v; if (low){ const w=low[o+j]; el+=w*w; } }
+    envF[i] = Math.log(1 + 1000*e/hop); envL[i] = Math.log(1 + 1000*el/hop);
+  }
+  const on = new Float32Array(nF);
+  for (let i=1;i<nF;i++) on[i] = 0.5*Math.max(0, envF[i]-envF[i-1]) + (low ? 2.5 : 1.5)*Math.max(0, envL[i]-envL[i-1]);
+  // нормализация с вычитанием скользящего среднего
+  const win = Math.round(0.5/hopT), onN = new Float32Array(nF);
+  let acc = 0; for (let i=0;i<nF;i++){ acc += on[i]; if (i>=win) acc -= on[i-win]; onN[i] = Math.max(0, on[i] - 1.1*acc/Math.min(i+1,win)); }
+  // темп: автокорреляция
+  const minL = Math.round(0.33/hopT), maxL = Math.round(1.0/hopT);
+  let bestL = minL, bestS = -1; const ac = [];
+  for (let L=minL; L<=maxL; L++){
+    let s=0; for (let i=0;i+L<nF;i++) s += onN[i]*onN[i+L];
+    const bpmL = 60/(L*hopT), w = Math.exp(-0.5*Math.pow(Math.log2(bpmL/120)/0.9, 2));
+    s *= w; ac[L] = s; if (s > bestS){ bestS = s; bestL = L; }
+  }
+  // дробный период (параболическая интерполяция)
+  let perF = bestL;
+  if (ac[bestL-1] !== undefined && ac[bestL+1] !== undefined){
+    const a=ac[bestL-1], b=ac[bestL], c=ac[bestL+1], den = a - 2*b + c;
+    if (den < 0) perF = bestL + 0.5*(a - c)/den;
+  }
+  // фаза
+  let bestOff = 0, bestP = -1;
+  for (let o=0;o<bestL;o++){ let s=0; for (let i=o;i<nF;i+=bestL) s += onN[i]; if (s>bestP){ bestP=s; bestOff=o; } }
+  // трекинг долей с подстройкой
+  // уточняем фазу по точному периоду
+  { let bo = bestOff, bv = -1;
+    for (let o=0;o<perF;o+=0.5){ let s=0; for (let x=o;x<nF;x+=perF) s += onN[Math.round(x)]||0; if (s>bv){ bv=s; bo=o; } }
+    bestOff = bo; }
+  const bt = [], bs = [], tol = Math.max(2, Math.round(perF*0.06));
+  let mean = 0; for (let i=0;i<nF;i++) mean += onN[i]; mean /= nF;
+  let pos = bestOff;
+  while (pos < nF){
+    const c = Math.round(pos);
+    let m = c, mv = -1;
+    for (let j=c-tol;j<=c+tol;j++) if (j>=0 && j<nF && onN[j]>mv){ mv=onN[j]; m=j; }
+    const p = mv > mean*3 ? 0.75*m + 0.25*pos : pos;
+    bt.push(Math.max(0, p*hopT - 0.035)); bs.push(Math.max(0,mv));
+    pos = p + perF;
+  }
+  beats = bt; beatStrength = bs; bpm = Math.round(60/(perF*hopT));
+  bandOnsets = await analyzeBands(mono, sr, len);
+  return { duration: ab.duration };
+}
+// ноты по полосам: для каждого кольца — моменты, когда в его диапазоне звучит нота
+let bandOnsets = null, ringHits = null;
+async function analyzeBands(mono, sr, len){
+  const SR = 16000, out = [];
+  const OAC = window.OfflineAudioContext||window.webkitOfflineAudioContext;
+  const n16 = Math.ceil(len*SR/sr);
+  const src = new AudioBuffer({ length: len, sampleRate: sr, numberOfChannels: 1 });
+  src.getChannelData(0).set(mono);
+  for (let k=0;k<8;k++){
+    $('trackName').textContent = `⏳ Ищу ноты: кольцо ${k+1} из 8…`;
+    const f0 = 60*Math.pow(8000/60, k/8), f1 = 60*Math.pow(8000/60, (k+1)/8);
+    const off = new OAC(1, n16, SR);
+    const s = off.createBufferSource(); s.buffer = src; let node = s;
+    if (k > 0){ for (let q=0;q<2;q++){ const hp = off.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=f0; node.connect(hp); node = hp; } }
+    if (k < 7){ for (let q=0;q<2;q++){ const lp = off.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=Math.min(f1, 7900); node.connect(lp); node = lp; } }
+    node.connect(off.destination); s.start();
+    const d = (await off.startRendering()).getChannelData(0);
+    const hop = 256, hopT = hop/SR, nF = Math.floor(d.length/hop);
+    const env = new Float32Array(nF);
+    for (let i=0;i<nF;i++){ let e=0; const o=i*hop; for (let j=0;j<hop;j++){ const v=d[o+j]; e+=v*v; } env[i] = Math.log(1 + 3000*e/hop); }
+    const on = new Float32Array(nF);
+    for (let i=2;i<nF;i++) on[i] = Math.max(0, env[i] - Math.max(env[i-1], env[i-2]*0.5 + env[i-1]*0.5));
+    let gm = 0; for (let i=0;i<nF;i++) gm += on[i]; gm /= nF;
+    let sq = 0; for (let i=0;i<nF;i++) sq += (on[i]-gm)*(on[i]-gm); const sd = Math.sqrt(sq/nF);
+    const W = Math.round(0.4/hopT), minGap = 0.16, hits = [];
+    let acc = 0;
+    for (let i=0;i<nF;i++){
+      acc += on[i]; if (i >= W) acc -= on[i-W];
+      const loc = acc/Math.min(i+1, W);
+      if (on[i] > loc*1.6 + gm + 0.9*sd){
+        let isMax = true; for (let j=i-3;j<=i+3;j++) if (j>=0 && j<nF && on[j] > on[i]){ isMax = false; break; }
+        if (!isMax) continue;
+        const tt = i*hopT;
+        if (hits.length && tt - hits[hits.length-1].t < minGap){
+          if (on[i] > hits[hits.length-1].v) hits[hits.length-1] = { t: tt, v: on[i] };
+        } else hits.push({ t: tt, v: on[i] });
+      }
+    }
+    out.push(hits);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  return out;
+}
+function buildAlignments(){
+  if (!beats) { A = null; return; }
+  const period = 60/bpm;
+  let m = 1, md = 1e9;
+  for (const c of [1,2,4,8]){ const d = Math.abs(c*period - T); if (d < md){ md=d; m=c; } }
+  let r0 = 0, best = -1;
+  for (let r=0;r<m;r++){ let s=0; for (let i=r;i<beats.length;i+=m) s += beatStrength[i]; if (s>best){ best=s; r0=r; } }
+  A = []; for (let i=r0;i<beats.length;i+=m) if (beats[i] >= 1.4) A.push(beats[i]);
+  if (A.length < 2) A = null;
+}
+
+// ---------- state ----------
+let mode='play', T=3.6, running=false;
+let t=0, lastNow=0;
+let K=2, rings=[];
+let beams=[], sparks=[], bokeh=[];
+let score=0, combo=0, maxCombo=0, perfects=0, goods=0, misses=0;
+let judgedIdx=-1, lastSeg=0, crossKey=[];
+const ROUND = 24, MAXK = 8;
+const musicMode = () => hasMusic && A;
+
+// время n-го выравнивания
+function getA(n){
+  if (!musicMode()) return n*T;
+  const L = A.length;
+  if (n < 0) return A[0] + n*(A[1]-A[0]);
+  if (n >= L) return A[L-1] + (n-L+1)*(A[L-1]-A[L-2]);
+  return A[n];
+}
+// номер отрезка: getA(n-1) <= t < getA(n)
+function segIndex(tt){
+  if (!musicMode()) return Math.floor(tt/T) + 1;
+  if (tt < A[0]) return Math.floor((tt - A[0])/(A[1]-A[0])) + 1;
+  let lo=0, hi=A.length-1;
+  if (tt >= A[hi]) return hi + 1 + Math.floor((tt - A[hi])/(A[hi]-A[hi-1]));
+  while (hi - lo > 1){ const mid=(lo+hi)>>1; if (A[mid] <= tt) lo = mid; else hi = mid; }
+  return hi;
+}
+// линия попадания неподвижна — орбиты не крутятся
+const HIT_ANGLE = -Math.PI/2;
+function phiN(n){ return HIT_ANGLE; }
+function segInfo(tt){
+  const n = segIndex(tt), a0 = getA(n-1), a1 = getA(n);
+  const p = Math.min(1, Math.max(0, (tt - a0)/(a1 - a0)));
+  return { n, a0, a1, p, base: phiN(n-1) + (phiN(n)-phiN(n-1))*p };
+}
+// ---------- круговой секвенсор: стрелка из светящихся точек обходит круг, ноты стоят на кольцах ----------
+let ringNotes = [], noteIdx = [], P = 7.2, beamPulse = 0;
+const LAG = 0.035;                                   // лёгкий изгиб стрелки, как в ролике
+function handAngle(tt, k){ return -Math.PI/2 - 2*Math.PI*tt/P + k*LAG; }   // против часовой
+function revPeriod(){ if (!musicMode()) return 2*T;
+  if (musicMode()){
+    const b = 60/bpm; let best = 8, bd = 1e9;
+    for (const c of [4,8,16]){ const d = Math.abs(c*b - 6.5); if (d < bd){ bd = d; best = c; } }
+    return best*b;
+  }
+  return 2*T;
+}
+function buildNotes(){
+  P = revPeriod();
+  ringNotes = [];
+  if (musicMode()){
+    for (let k=0;k<MAXK;k++){
+      let src = bandOnsets ? bandOnsets[k].slice() : [];
+      // не больше ~7 нот на кольцо за оборот: оставляем самые сильные
+      const dur = src.length ? src[src.length-1].t - src[0].t + 1 : 1, cap = Math.ceil(dur*7/P);
+      if (src.length > cap) src = src.sort((a,b)=>b.v-a.v).slice(0, cap);
+      let arr = src.map(o => ({ t:o.t, big:false }));
+      if (k === 0){ arr = arr.filter(n => !A.some(a => Math.abs(a - n.t) < 0.12)).concat(A.map(a => ({ t:a, big:true }))); }
+      arr.sort((a,b)=>a.t-b.t);
+      const thin = []; for (const n of arr){ if (!thin.length || n.t - thin[thin.length-1].t >= 0.3 || n.big){ if (n.big && thin.length && n.t - thin[thin.length-1].t < 0.3) thin.pop(); thin.push(n); } }
+      ringNotes.push(thin);
+    }
+  } else {
+    // встроенный трек: 8 партий, по одной на кольцо. Доля = T/8, такт = 4 доли, оборот стрелки = 4 такта
+    const B = T/8, BAR = 4*B;
+    // Am – F – C – G
+    const PROG = [ {r:57, ch:[57,60,64]}, {r:53, ch:[53,57,60]}, {r:48, ch:[55,60,64]}, {r:55, ch:[55,59,62]} ];
+    const MEL = [ [76,null,74,72,null,74,76,null], [77,null,76,74,null,72,74,null],
+                  [79,null,76,null,74,72,null,74], [74,null,71,null,72,74,null,null] ];
+    const parts = [[],[],[],[],[],[],[],[]];
+    for (let bar=0; bar*BAR < 900; bar++){
+      const t0 = bar*BAR, c = PROG[bar%4];
+      for (let q=0;q<4;q++) parts[0].push({ t:t0+q*B, big: bar%2===0 && q===0, ev:{} });
+      parts[1].push({ t:t0+1*B, ev:{} }, { t:t0+3*B, ev:{} });
+      for (let q=0;q<4;q++) parts[2].push({ t:t0+(q+0.5)*B, ev:{ acc: q===3 } });
+      [[0,0,0.5],[0.75,0,0.4],[1.5,12,0.3],[2,0,0.5],[2.75,7,0.4],[3.5,12,0.3]].forEach(([p,o,l]) => parts[3].push({ t:t0+p*B, ev:{ m:c.r-12+o, len:l*B*2 } }));
+      parts[4].push({ t:t0, ev:{ ch:c.ch, len:BAR*0.95 } });
+      const arp = [c.ch[0]+12, c.ch[1]+12, c.ch[2]+12, c.ch[1]+24];
+      [0,0.75,1.5,2,2.75,3.5].forEach((p,i) => parts[5].push({ t:t0+p*B, ev:{ m: arp[i%4] } }));
+      MEL[bar%4].forEach((m,i) => { if (m) parts[6].push({ t:t0+i*B/2, ev:{ m, len:B*0.9 } }); });
+      parts[7].push({ t:t0+0.5*B, ev:{ m:c.ch[2]+24 } }, { t:t0+2.5*B, ev:{ m:c.ch[0]+24 } });
+    }
+    for (const arr of parts){ arr.sort((x,y)=>x.t-y.t); ringNotes.push(arr); }
+  }
+  noteIdx = ringNotes.map(arr => { let i=0; while (i<arr.length && arr[i].t <= t) i++; return i; });
+}
+function totalAligns(){ return musicMode() ? A.length : (hasMusic ? Infinity : ROUND); }
+
+function makeRings(){
+  rings = [];
+  for (let k=0;k<MAXK;k++){
+    const m = k===0 ? 5 : 3 + Math.floor(Math.random()*4);
+    const offs = [0];
+    for (let j=1;j<m;j++) offs.push(j*2*Math.PI/m + (Math.random()-.5)*0.6);
+    rings.push({ offs, vis: 0, flash: 0, pulse: 0, bandAvg: 0, cool: 0 });
+  }
+}
+function makeBokeh(){
+  bokeh = [];
+  for (let i=0;i<46;i++) bokeh.push({ a:Math.random()*Math.PI*2, r:(150+Math.random()*130), s:2+Math.random()*7,
+    v:(Math.random()-.5)*0.08, ph:Math.random()*6 });
+}
+const R0 = () => 72*S, RMAX = () => 182*S;
+function ringR(k){ return R0() + k*(RMAX()-R0())/(MAXK-1); }
+
+function newGame(){
+  makeRings(); score=0; combo=0; maxCombo=0; perfects=0; goods=0; misses=0;
+  t = musicMode() ? 0 : -0.15;
+  judgedIdx = musicMode() ? -1 : 0;
+  lastSeg = segIndex(t); K=2; beams=[]; sparks=[]; buildNotes();
+  running = true; updateHud();
+}
+
+// ---------- события ----------
+function onAlign(n){
+  beamPulse = 1;
+  for (let k=0;k<K;k++){
+    const r = ringR(k), a = handAngle(t, k);
+    for (let i=0;i<6;i++){
+      const aa = a + (Math.random()-.5)*0.5, sp=(40+Math.random()*140)*S;
+      sparks.push({ x:Math.cos(a)*r, y:Math.sin(a)*r, vx:Math.cos(aa)*sp, vy:Math.sin(aa)*sp, life:1 });
+    }
+  }
+}
+const firstJudged = () => musicMode() ? 0 : 1;
+function judgeMissIfPassed(){
+  if (mode!=='play') return;
+  const n = judgedIdx + 1;
+  if (n >= firstJudged() && t > getA(n) + 0.22){
+    judgedIdx = n; misses++; combo=0; showJudge('МИМО', '#ff6b9a'); updateHud(); checkEnd(n);
+  }
+}
+function checkEnd(n){
+  // с треком игра идёт до конца музыки (финиш по событию ended)
+  if (mode==='play' && !hasMusic && n >= ROUND){ running=false; setTimeout(finish, 900); }
+}
+function tap(){
+  if (!running || mode!=='play') return;
+  const s = segIndex(t);
+  const n = Math.abs(t - getA(s-1)) < Math.abs(getA(s) - t) ? s-1 : s;
+  if (n < firstJudged() || n <= judgedIdx) return;
+  const d = Math.abs(t - getA(n));
+  if (d < 0.07){ perfects++; combo++; score += 100*(1+Math.floor(combo/4)); showJudge('ИДЕАЛЬНО', '#fff36b'); hitSound(true); burst(n, 1.6); }
+  else if (d < 0.16){ goods++; combo++; score += 50*(1+Math.floor(combo/4)); showJudge('ХОРОШО', '#9fe7ff'); hitSound(false); burst(n, 1); }
+  else { misses++; combo=0; showJudge(t < getA(n) ? 'РАНО' : 'ПОЗДНО', '#ff6b9a'); }
+  judgedIdx = n; maxCombo = Math.max(maxCombo, combo); updateHud(); checkEnd(n);
+}
+function burst(n, k){ beamPulse = Math.max(beamPulse, k); }
+let judgeTimer=0;
+function showJudge(txt, col){ return; // надписи «Мимо», «Рано» и т.п. отключены
+
+  const el = $('judge'); el.textContent = txt; el.style.color = col;
+  el.style.textShadow = `0 0 16px ${col}`; el.style.opacity = 1; judgeTimer = 0.6;
+}
+function updateHud(){
+  $('score').textContent = mode==='play' ? score : '';
+  $('combo').textContent = mode==='play' && combo>1 ? `комбо ×${combo}` : '';
+}
+function finish(){
+  if ($('end').classList.contains('hidden') === false) return;
+  running = false;
+  const total = perfects+goods+misses || 1;
+  const acc = Math.round((perfects + goods*0.5)/total*100);
+  const key = 'orbity-best-' + (musicMode() ? 'track-'+trackKey : T);
+  const prev = parseInt(store.get(key))||0;
+  let txt = `Очки: <b>${score}</b><br>Идеально: ${perfects} · Хорошо: ${goods} · Мимо: ${misses}<br>Точность: ${acc}% · Макс. комбо: ${maxCombo}`;
+  if (score > prev){ store.set(key, score); if (prev) txt += '<br>🏆 Новый рекорд!'; } else txt += `<br>Рекорд: ${prev}`;
+  $('result').innerHTML = txt;
+  $('end').classList.remove('hidden');
+  if (hasMusic) $('music').pause();
+}
+
+// ---------- полосы частот по кольцам (живые «ноты» трека) ----------
+function bandsUpdate(dt){
+  if (!analyser || !AC || AC.state!=='running') return 0;
+  analyser.getByteFrequencyData(freqData);
+  const nb = freqData.length, binHz = AC.sampleRate/2/nb;
+  let bass = 0; for (let i=1;i<Math.max(2, Math.round(150/binHz));i++) bass += freqData[i]; bass /= Math.max(1, Math.round(150/binHz)-1)*255;
+  // кольцо 0 — бас, внешние — всё выше (лог-шкала 60 Гц … 8 кГц)
+  for (let k=0;k<MAXK;k++){
+    const f0 = 60*Math.pow(8000/60, k/MAXK), f1 = 60*Math.pow(8000/60, (k+1)/MAXK);
+    const i0 = Math.max(1, Math.floor(f0/binHz)), i1 = Math.max(i0+1, Math.ceil(f1/binHz));
+    let e=0; for (let i=i0;i<i1 && i<nb;i++) e += freqData[i]; e /= (i1-i0)*255;
+    const rg = rings[k]; rg.cool -= dt;
+    if (!(musicMode() && bandOnsets) && e > rg.bandAvg*1.25 + 0.06 && rg.cool <= 0 && e > 0.12){ rg.pulse = 1; rg.cool = 0.12; }
+    rg.bandAvg += (e - rg.bandAvg)*Math.min(1, dt*3);
+  }
+  return bass;
+}
+
+// ---------- отрисовка ----------
+let level = 0;
+function draw(dt){
+  const lv = bandsUpdate(dt);
+  level += (lv - level)*Math.min(1, dt*12);
+
+  const si = segInfo(t);
+  const dNear = Math.min(Math.abs(t - si.a0), Math.abs(si.a1 - t));
+  const span = Math.max(0.4, si.a1 - si.a0);
+  const near = Math.exp(-Math.pow(dNear/(0.063*span), 2));
+
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+
+  const glowR = (215 + 30*level + 25*near)*S;
+  let g = ctx.createRadialGradient(cx,cy,R0()*0.6, cx,cy, glowR*1.35);
+  g.addColorStop(0,'rgba(0,0,0,1)');
+  g.addColorStop(0.35,`rgba(40,20,140,${0.55+0.3*level})`);
+  g.addColorStop(0.7,`rgba(70,40,220,${0.45+0.35*level+0.2*near})`);
+  g.addColorStop(1,'rgba(20,0,60,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,glowR*1.35,0,Math.PI*2); ctx.fill();
+
+  ctx.globalCompositeOperation='lighter';
+  for (const b of bokeh){
+    b.a += b.v*dt;
+    const r = b.r*S*(1+0.06*level), x = cx+Math.cos(b.a)*r, y = cy+Math.sin(b.a)*r;
+    const al = (0.12 + 0.18*(0.5+0.5*Math.sin(t*1.3+b.ph))) * (0.7+level);
+    const rad = b.s*S*(1+level*0.6);
+    const bg = ctx.createRadialGradient(x,y,0,x,y,rad);
+    bg.addColorStop(0,`rgba(140,110,255,${al})`); bg.addColorStop(1,'rgba(90,60,255,0)');
+    ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+  }
+  {
+    const L = Math.hypot(W,H), a = handAngle(t, Math.max(0,K-1));
+    const inten = Math.min(1, 0.32 + 0.45*beamPulse + 0.5*level);
+    const w = (9 + 12*beamPulse)*S;
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(a);
+    const lg = ctx.createLinearGradient(R0(),0,L,0);
+    lg.addColorStop(0,`rgba(200,170,255,${0.8*inten})`); lg.addColorStop(1,'rgba(120,80,255,0)');
+    ctx.fillStyle=lg;
+    ctx.beginPath(); ctx.moveTo(R0()*0.9,-w*0.25); ctx.lineTo(L,-w); ctx.lineTo(L,w); ctx.lineTo(R0()*0.9,w*0.25); ctx.fill();
+    ctx.restore();
+  }
+  for (let k=0;k<MAXK;k++){
+    const rg = rings[k]; const target = k < K ? 1 : 0;
+    rg.vis += (target - rg.vis)*Math.min(1, dt*3);
+    rg.pulse = Math.max(0, rg.pulse - dt*4);
+    if (rg.vis < 0.01) continue;
+    const r = ringR(k)*(0.85+0.15*rg.vis) * (1 + 0.012*rg.pulse);
+    const inner = k===0, pu = rg.pulse*rg.vis;
+    ctx.lineWidth = (inner ? 1.3 : 1) + 1.6*pu;
+    ctx.strokeStyle = inner ? `rgba(255,226,140,${Math.min(1,0.85*rg.vis+0.3*pu)})` : `rgba(235,230,255,${Math.min(1,0.75*rg.vis+0.3*pu)})`;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+    if (pu > 0.05){
+      ctx.strokeStyle = inner ? `rgba(255,200,90,${0.35*pu})` : `rgba(160,130,255,${0.4*pu})`;
+      ctx.lineWidth = 6*S*pu; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+    }
+
+    const base = inner ? '255,236,160' : '255,255,255';
+    // ноты на кольце
+    const arr = ringNotes[k] || [], horizon = P*0.9;
+    for (let i = Math.max(0, (noteIdx[k]||0) - 6); i < arr.length; i++){
+      const nt = arr[i], d = nt.t - t;
+      if (d > horizon) break;
+      if (d < -0.35) continue;
+      const a = handAngle(nt.t, k), x = cx+Math.cos(a)*r, y = cy+Math.sin(a)*r;
+      const dr = (nt.big ? 5.4 : inner ? 3.8 : 3.0)*S;
+      const al = rg.vis * Math.min(1, (horizon - d)/(P*0.12));
+      if (d >= 0){
+        ctx.fillStyle = `rgba(0,0,10,${al})`; ctx.beginPath(); ctx.arc(x,y,dr,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = `rgba(${base},${al})`; ctx.lineWidth = 1.2; ctx.stroke();
+      } else {
+        const f = 1 + d/0.35, rr = dr*(1.4+1.6*f);
+        const gg = ctx.createRadialGradient(x,y,0,x,y,rr*2);
+        gg.addColorStop(0,`rgba(255,250,235,${f})`); gg.addColorStop(0.4,`rgba(${base},${0.55*f})`); gg.addColorStop(1,'rgba(150,120,255,0)');
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x,y,rr*2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${f})`; ctx.beginPath(); ctx.arc(x,y,dr,0,Math.PI*2); ctx.fill();
+      }
+    }
+    // точка стрелки
+    {
+      const a = handAngle(t, k), x = cx+Math.cos(a)*r, y = cy+Math.sin(a)*r, dr = (inner ? 4.6 : 3.6)*S;
+      const f = 0.55 + 0.45*Math.max(rg.flash, beamPulse);
+      const gg = ctx.createRadialGradient(x,y,0,x,y,dr*4);
+      gg.addColorStop(0,`rgba(255,252,240,${f*rg.vis})`); gg.addColorStop(0.35,`rgba(${base},${0.5*f*rg.vis})`); gg.addColorStop(1,'rgba(150,120,255,0)');
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x,y,dr*4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${rg.vis})`; ctx.beginPath(); ctx.arc(x,y,dr,0,Math.PI*2); ctx.fill();
+    }
+    if (rg.flash) rg.flash = Math.max(0, rg.flash - dt*3);
+  }
+  for (const s of sparks){
+    ctx.fillStyle=`rgba(230,215,255,${s.life})`;
+    ctx.beginPath(); ctx.arc(cx+s.x, cy+s.y, 1.6*S, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalCompositeOperation='source-over';
+
+  if (running){
+    ctx.fillStyle='rgba(200,190,255,0.55)';
+    ctx.font=`500 ${Math.round(12*S)}px -apple-system,"Segoe UI",Roboto,sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const el = $('music');
+    if (hasMusic && isFinite(el.duration)){
+      const left = Math.max(0, el.duration - el.currentTime), m = Math.floor(left/60), sec = Math.floor(left%60);
+      ctx.fillText(`${m}:${String(sec).padStart(2,'0')}`, cx, cy + (mode==='play' ? 9*S : 0));
+      if (mode==='play') ctx.fillText(`${Math.max(0, Math.min(segIndex(t) - firstJudged(), totalAligns()))} линий`, cx, cy - 9*S);
+    } else if (mode==='play'){
+      const done = Math.max(0, segIndex(t) - firstJudged());
+      ctx.fillText(`${Math.min(done,totalAligns())} / ${totalAligns()}`, cx, cy);
+    }
+  }
+}
+
+// ---------- цикл ----------
+function loop(now){
+  const dt = Math.min(0.05, (now-lastNow)/1000 || 0); lastNow = now;
+  const el = $('music');
+  if (running && hasMusic){
+    const lat = (AC && (AC.outputLatency || AC.baseLatency)) || 0;
+    const heard = el.currentTime - lat;
+    if (!el.paused){ t += dt; if (Math.abs(t - heard) > 0.06) t = heard; }
+    else t = heard;
+  } else {
+    t += dt * (running || mode==='watch' ? 1 : 0.35);
+  }
+  const si = segInfo(t);
+  // стрелка проходит ноты
+  for (let k=0;k<ringNotes.length;k++){
+    const arr = ringNotes[k];
+    while (noteIdx[k] < arr.length && arr[noteIdx[k]].t <= t){
+      if (running && k < K){ rings[k].flash = 1; rings[k].pulse = Math.max(rings[k].pulse, 0.45); ringNote(k, arr[noteIdx[k]]); }
+      noteIdx[k]++;
+    }
+  }
+  beamPulse = Math.max(0, beamPulse - dt*2.2);
+  if (si.n > lastSeg){ if (running) for (let n=lastSeg; n<si.n; n++) onAlign(n); lastSeg = si.n; }
+  else if (si.n < lastSeg) lastSeg = si.n;
+  if (running){
+    const passed = Math.max(0, si.n - (musicMode() ? 0 : 1));
+    const total = (mode==='watch' && !musicMode()) ? Infinity : totalAligns();
+    K = Math.max(2, Math.min(MAXK, 2 + passed, 2 + (total - passed)));
+  } else K = MAXK;
+  if (bandGains.length && AC){
+    for (let k=0;k<bandGains.length;k++){
+      const on = !running || k < K;
+      if (bandGains[k]._on !== on){ bandGains[k]._on = on; bandGains[k].gain.setTargetAtTime(on ? 1 : 0.0, AC.currentTime, on ? 0.3 : 0.25); if (on && running) rings[k].pulse = 1; }
+    }
+  }
+  if (running) judgeMissIfPassed();
+
+  for (let i=beams.length-1;i>=0;i--){ beams[i].life -= dt*1.6; if (beams[i].life<=0) beams.splice(i,1); }
+  for (let i=sparks.length-1;i>=0;i--){ const s=sparks[i]; s.x+=s.vx*dt; s.y+=s.vy*dt; s.life-=dt*1.4; if (s.life<=0) sparks.splice(i,1); }
+  if (judgeTimer>0){ judgeTimer-=dt; if (judgeTimer<=0) $('judge').style.opacity=0; }
+  draw(dt);
+  requestAnimationFrame(loop);
+}
+
+// ---------- интерфейс ----------
+cv.addEventListener('pointerdown', ()=>{ audio(); tap(); });
+addEventListener('keydown', e=>{ if (e.code==='Space'){ e.preventDefault(); tap(); } });
+
+function pick(rowId, attr, cb){
+  const row=$(rowId);
+  row.addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return;
+    row.querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); cb(b.dataset[attr]); showBest(); });
+}
+pick('modeRow','m', v=>mode=v);
+pick('tempoRow','t', v=>{ T=parseFloat(v); buildAlignments(); trackLabel(); });
+let trackKey = '', trackName = '', analyzing = false;
+function showBest(){
+  const key = 'orbity-best-' + (musicMode() ? 'track-'+trackKey : T);
+  const b=parseInt(store.get(key))||0;
+  $('best').textContent = b ? (musicMode() ? `Рекорд на этом треке: ${b}` : `Рекорд на этом темпе: ${b}`) : '';
+}
+function trackLabel(){
+  if (!hasMusic) return;
+  $('trackName').textContent = analyzing ? '⏳ Слушаю трек и ищу ритм…'
+    : A ? `▶ ${trackName} · ${bpm} BPM · ${A.length} линий` : `▶ ${trackName} · ритм не найден, обычный темп`;
+}
+
+function start(){
+  if (analyzing) return;
+  audio();
+  ['start','end'].forEach(id=>$(id).classList.add('hidden'));
+  $('hud').classList.remove('hidden');
+  const el=$('music');
+  if (hasMusic){ setupMusic(); el.loop = false; el.currentTime=0; }
+  newGame();
+  if (hasMusic) el.play().catch(()=>{});
+}
+function menu(){
+  running=false; $('hud').classList.add('hidden');
+  $('end').classList.add('hidden'); $('start').classList.remove('hidden');
+  $('music').pause(); showBest();
+}
+$('music').addEventListener('ended', ()=>{
+  if (!running) return;
+  if (mode==='play') finish(); else { $('music').currentTime = 0; newGame(); $('music').play().catch(()=>{}); }
+});
+$('go').onclick=start;
+$('again').onclick=start;
+$('toMenu').onclick=menu;
+$('menuBtn').onclick=menu;
+$('muteBtn').onclick=e=>{ muted=!muted; e.target.textContent=muted?'🔇':'🔊';
+  audio(); if (master) master.gain.value = muted?0:1; };
+$('notesBtn').onclick=e=>{ notesWithMusic=!notesWithMusic; e.target.classList.toggle('sel',notesWithMusic); };
+$('file').addEventListener('change', async e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  audio(); setupMusic();
+  const el=$('music');
+  if (el.dataset.url) URL.revokeObjectURL(el.dataset.url);
+  const url=URL.createObjectURL(f); el.dataset.url=url; el.src=url; hasMusic=true;
+  bandOnsets = null; ringHits = null; trackName = f.name; trackKey = f.name + ':' + f.size;
+  $('noMusic').classList.remove('hidden');
+  analyzing = true; beats = null; A = null; trackLabel(); $('go').disabled = true; $('go').style.opacity = .5;
+  let decodeFail = false;
+  try { await analyzeTrack(f); buildAlignments(); } catch(err){ beats = null; A = null; decodeFail = true; }
+  analyzing = false; trackLabel();
+  if (decodeFail){
+    const el2 = $('music');
+    const playable = !!el2.canPlayType(f.type || 'audio/mpeg');
+    $('trackName').textContent = playable ? `▶ ${trackName} · не удалось разобрать ритм, играю в обычном темпе`
+                                          : `⚠ ${trackName}: этот формат браузер не открывает, попробуйте mp3`;
+    if (!playable){ hasMusic = false; $('noMusic').classList.add('hidden'); }
+  } showBest(); $('go').disabled = false; $('go').style.opacity = 1;
+});
+$('noMusic').onclick=()=>{
+  hasMusic=false; beats=null; bandOnsets=null; ringHits=null; A=null; const el=$('music'); el.pause(); el.removeAttribute('src');
+  $('trackName').textContent='Без трека — кольца играют мелодию сами';
+  $('noMusic').classList.add('hidden'); $('file').value=''; showBest();
+};
+
+// перетаскивание файла на страницу
+addEventListener('dragover', e => { e.preventDefault(); });
+addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+  const inp = document.getElementById('file');
+  try { const dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change')); } catch(err){}
+});
+addEventListener("resize", resize);
+resize(); makeRings(); makeBokeh(); buildNotes(); K=MAXK; for (const r of rings) r.vis=1; showBest();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
