@@ -12,7 +12,7 @@
     {{ G.builtin('orbity') }}
   </div>
 
-  {% set live = extra | selectattr('status', 'equalto', 'live') | list %}
+  {% set live = extra | rejectattr('status', 'equalto', 'soon') | list %}
   {% set soon = extra | selectattr('status', 'equalto', 'soon') | list %}
   {% if live %}
   <div class="shelf-label" style="margin-top: 64px"><h2>{{ t('games_more_title') }}</h2><p>{{ t('games_more_note') }}</p></div>

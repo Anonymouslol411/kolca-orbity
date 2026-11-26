@@ -6,11 +6,12 @@
   <h1>Админка</h1>
   {% include '_admin_nav.html' %}
   {% set msgs = {'saved': ('ok', 'Сохранено.'), 'deleted': ('ok', 'Игра удалена.'), 'bad_url': ('warn', 'Ссылка должна начинаться с http:// или https://.'),
-                 'no_title': ('warn', 'Укажите название.'), 'bad_cover': ('warn', 'Обложка — картинка PNG, JPG или WebP до 5 МБ.')} %}
+                 'no_title': ('warn', 'Укажите название.'), 'bad_cover': ('warn', 'Обложка — картинка PNG, JPG или WebP до 5 МБ.'),
+                 'bad_price': ('warn', 'Для статуса «Продаётся» укажите цену больше нуля.')} %}
   {% if msg in msgs %}<div class="note {{ msgs[msg][0] }}">{{ msgs[msg][1] }}</div>{% endif %}
 
   <p class="muted">«Кольца» и «Орбиты» встроены в сайт и входят в подписку. Здесь — остальные игры для раздела «Игры»:
-    готовые (со ссылкой: Roblox, itch.io, скачивание) и те, что выйдут позже.</p>
+    продаваемые разово (покупатель получает файл игры), бесплатные по ссылке (Roblox, itch.io) и те, что выйдут позже.</p>
 
   <div class="admin-games">
     <div class="card">
@@ -20,12 +21,13 @@
         {% if g.cover %}<div class="disc cover-img"><img src="{{ url_for('cover_file', name=g.cover) }}" alt=""></div>
         {% else %}<div class="disc disc-hue" style="--h: {{ g.hue }}"></div>{% endif %}
         <div>
-          <b>{{ g.title }}</b> {% if g.status == 'soon' %}<span class="tag">скоро</span>{% else %}<span class="tag">доступна</span>{% endif %}
-          <div class="fine">{{ g.description|truncate(90) }}{% if g.url %}<br>{{ g.url|truncate(60) }}{% endif %}</div>
+          <b>{{ g.title }}</b> {% if g.status == 'soon' %}<span class="tag">скоро</span>{% elif g.status == 'paid' %}<span class="tag">{{ fmt_rub(g.price) }}</span>{% else %}<span class="tag">по ссылке</span>{% endif %}
+          <div class="fine">{{ g.description|truncate(90) }}{% if g.url %}<br>{{ g.url|truncate(60) }}{% endif %}
+            {% if g.status == 'paid' %}<br>Файл: {{ g.file or 'не выбран — покупатели пока не смогут скачать' }} · купили: {{ sold.get(g.id, 0) }}{% endif %}</div>
         </div>
         <div>
           <a href="{{ url_for('admin.games', edit=g.id) }}">Изменить</a>
-          <form method="post" class="inline-check" data-confirm="Удалить игру «{{ g.title }}» из каталога?">
+          <form method="post" class="inline-check" data-confirm="Удалить игру «{{ g.title }}» из каталога?{% if sold.get(g.id) %} Купившие её ({{ sold[g.id] }}) потеряют доступ.{% endif %}">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ g.id }}">
             <button class="link-btn danger-link" type="submit">Удалить</button>
           </form>
@@ -46,7 +48,14 @@
         <label>Статус
           <select class="field" name="status">
             <option value="soon" {% if not cur or cur.status == 'soon' %}selected{% endif %}>Скоро — анонс, без кнопки</option>
-            <option value="live" {% if cur and cur.status == 'live' %}selected{% endif %}>Доступна — кнопка «Открыть» ведёт по ссылке</option>
+            <option value="live" {% if cur and cur.status == 'live' %}selected{% endif %}>По ссылке — кнопка «Открыть» ведёт по ссылке</option>
+            <option value="paid" {% if cur and cur.status == 'paid' %}selected{% endif %}>Продаётся — разовая покупка на сайте, покупатель скачивает файл</option>
+          </select></label>
+        <label>Цена, ₽ (для «Продаётся»)<input type="text" name="price" inputmode="decimal" placeholder="5000" value="{{ '%g' % cur.price if cur and cur.price else '' }}"></label>
+        <label>Файл игры (для «Продаётся») — сначала загрузите его во вкладке «Файлы»
+          <select class="field" name="file">
+            <option value="">— не выбран —</option>
+            {% for f in files %}<option value="{{ f.name }}" {% if cur and cur.file == f.name %}selected{% endif %}>{{ f.name }} ({{ '%.0f' % (f.size / 1048576) }} МБ)</option>{% endfor %}
           </select></label>
         <label>Ссылка (для доступных игр)<input type="url" name="url" placeholder="https://www.roblox.com/games/…" value="{{ cur.url or '' if cur else '' }}"></label>
         <label>Обложка — PNG, JPG или WebP до 5 МБ (необязательно)<input type="file" name="cover" accept="image/png,image/jpeg,image/webp"></label>

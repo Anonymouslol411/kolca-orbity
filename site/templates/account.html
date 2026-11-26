@@ -62,7 +62,7 @@
     <h3>{{ t('orders_title') }}</h3>
     {% for o in orders %}
       <div class="log-row"><span>{{ fmt_date(o.created_at, True) }}</span><b>{{ fmt_rub(o.amount) }}</b>
-        <span class="muted">{{ t('plan_' + o.product) }} · {{ t('order_' + o.status) }}
+        <span class="muted">{{ ptitle(o.product) }} · {{ t('order_' + o.status) }}
         {% if o.status == 'pending' %}
           <form method="post" action="{{ url_for('pay_check', oid=o.id) }}" class="inline-check">
             <input type="hidden" name="csrf" value="{{ csrf }}">

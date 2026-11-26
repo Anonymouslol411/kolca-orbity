@@ -16,7 +16,7 @@
       <tr>
         <td>{{ fmt_date(o.created_at, True) }}</td>
         <td>{% if o.user_id %}<a href="{{ url_for('admin.user', uid=o.user_id) }}">{{ o.email }}</a>{% else %}удалён{% endif %}</td>
-        <td>{{ {'month': 'Месяц', 'forever': 'Навсегда'}.get(o.product) }}</td>
+        <td>{{ ptitle(o.product) }}</td>
         <td>{{ fmt_rub(o.amount) }}</td>
         <td>{{ {'yoomoney_card': 'ЮMoney, карта', 'yoomoney_wallet': 'ЮMoney, кошелёк', 'card': 'Перевод на карту', 'balance': 'Баланс', 'telegram': 'Звёзды Telegram'}.get(o.method) }}</td>
         <td><code>{{ o.id[:6]|upper }}</code></td>

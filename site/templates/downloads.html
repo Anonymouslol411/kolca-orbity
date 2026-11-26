@@ -3,6 +3,19 @@
 {% block content %}
 <section class="section narrow">
   <h1>{{ t('download_title') }}</h1>
+  {% if mine %}
+    <h2>{{ t('my_games') }}</h2>
+    <div class="card">
+      {% for gm in mine %}
+        <div class="dl-row">
+          <div class="dl-name">{{ gm.title }}</div>
+          {% if gm.file %}<a class="btn" href="{{ url_for('download_file', name=gm.file) }}">{{ t('download_btn') }}</a>
+          {% else %}<span class="fine">{{ t('game_no_file') }}</span>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% if access %}<h2>{{ t('game_kolca') }} · {{ t('game_orbity') }}</h2>{% endif %}
+  {% endif %}
   {% if access %}
     {% if files %}
       <div class="card">
@@ -10,7 +23,7 @@
           <div class="dl-row">
             <div>
               <div class="dl-name">{{ f.name }}</div>
-              <div class="fine">{{ '%.1f' % (f.size / 1048576) }} MB · {{ fmt_date(f.mtime) }}</div>
+              <div class="fine">{{ '%.1f' % (f.size / 1048576) }} MB, {{ fmt_date(f.mtime) }}</div>
             </div>
             <a class="btn" href="{{ url_for('download_file', name=f.name) }}">{{ t('download_btn') }}</a>
           </div>
@@ -21,7 +34,7 @@
     {% endif %}
   {% else %}
     <div class="note">{{ t('downloads_locked', price=fmt_rub(products.forever.price) if products.forever else '') }}</div>
-    <a class="btn big" href="{{ url_for('pricing') if user else url_for('register') }}">{{ t('plan_forever') }} — {{ fmt_rub(products.forever.price) if products.forever else '' }}</a>
+    <a class="btn big" href="{{ url_for('pricing') if user else url_for('register') }}">{{ t('plan_forever') }}: {{ fmt_rub(products.forever.price) if products.forever else '' }}</a>
   {% endif %}
 </section>
 {% endblock %}

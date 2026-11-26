@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}{{ g_.title }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="game-hero">
+    {% if g_.cover %}<div class="disc cover-img"><img src="{{ url_for('cover_file', name=g_.cover) }}" alt=""></div>
+    {% else %}<div class="disc disc-hue" style="--h: {{ g_.hue }}" aria-hidden="true"></div>{% endif %}
+    <div>
+      <p><a href="{{ url_for('games_page') }}">{{ t('nav_games') }}</a></p>
+      <h1>{{ g_.title }}</h1>
+      {% if g_.description %}<p class="lead">{{ g_.description }}</p>{% endif %}
+      {% if request.args.get('lowbalance') %}<div class="note warn">{{ t('err_low_balance') }}</div>{% endif %}
+      {% if request.args.get('unavailable') %}<div class="note warn">{{ t('pay_unavailable') }}</div>{% endif %}
+      {% if request.args.get('toomany') %}<div class="note warn">{{ t('err_too_many') }}</div>{% endif %}
+
+      <div class="buy-box">
+        {% if owned %}
+          <p class="big-status">{{ t('game_owned') }}</p>
+          {% if g_.file %}<a class="btn big" href="{{ url_for('download_file', name=g_.file) }}">{{ t('download_btn') }}</a>
+          {% else %}<p class="muted">{{ t('game_no_file') }}</p>{% endif %}
+        {% else %}
+          <div class="plan-price"><span class="amount">{{ fmt_rub(g_.price) }}</span><span class="per">{{ t('label_once') }}</span></div>
+          <p class="muted">{{ t('game_once') }}</p>
+          {% if user and not methods and user.balance < g_.price %}
+            <div class="note warn">{{ t('pay_unavailable') }}</div>
+          {% elif user %}
+          <form method="post" action="{{ url_for('buy') }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="product" value="game:{{ g_.id }}">
+            <fieldset class="methods">
+              <legend>{{ t('method_label') }}</legend>
+              {% for m in methods %}
+                <label><input type="radio" name="method" value="{{ m }}" {% if loop.first %}checked{% endif %}> {{ t('m_' + m) }}</label>
+              {% endfor %}
+              {% if user.balance >= g_.price %}
+                <label><input type="radio" name="method" value="balance" {% if not methods %}checked{% endif %}> {{ t('m_balance', balance=fmt_rub(user.balance)) }}</label>
+              {% endif %}
+            </fieldset>
+            <button class="btn big" type="submit" {% if not methods and user.balance < g_.price %}disabled{% endif %}>{{ t('btn_buy', price=fmt_rub(g_.price)) }}</button>
+          </form>
+          {% else %}
+            <a class="btn big" href="{{ url_for('register') }}">{{ t('btn_buy', price=fmt_rub(g_.price)) }}</a>
+            <p class="fine">{{ t('game_need_account') }} <a href="{{ url_for('login') }}">{{ t('nav_login') }}</a></p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

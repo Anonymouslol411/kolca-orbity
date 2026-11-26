@@ -12,7 +12,7 @@
     'balance': ('ok', 'Баланс изменён.'), 'banned': ('ok', 'Аккаунт заблокирован, все его входы завершены.'),
     'unbanned': ('ok', 'Аккаунт разблокирован.'), 'sessions': ('ok', 'Пользователь разлогинен на всех устройствах.'),
     'bad_days': ('warn', 'Укажите число дней от 1 до 3650.'), 'bad_amount': ('warn', 'Укажите сумму больше нуля.'),
-    'bad_confirm': ('warn', 'Для удаления введите почту пользователя точно.') } %}
+    'bad_confirm': ('warn', 'Для удаления введите почту пользователя точно.'), 'game': ('ok', 'Игры пользователя обновлены.') } %}
   {% if msg in msgs %}<div class="note {{ msgs[msg][0] }}">{{ msgs[msg][1] }}</div>{% endif %}
 
   <div class="admin-grid">
@@ -59,6 +59,20 @@
       <p class="fine">Балансом пользователь может оплатить месяц или «Навсегда». В минус баланс не уходит.</p>
     </div>
 
+    {% if sale_games %}
+    <div class="card">
+      <h3>Игры за разовую покупку</h3>
+      {% for sg in sale_games %}
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='revoke_game' if sg.id in mine else 'give_game') }}" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="game" value="{{ sg.id }}">
+        <span>{{ sg.title }} — {% if sg.id in mine %}<span class="tag">куплена</span>{% else %}<span class="muted">нет</span>{% endif %}</span>
+        {% if sg.id in mine %}<button class="btn small danger" type="submit">Забрать</button>
+        {% else %}<button class="btn small" type="submit">Выдать</button>{% endif %}
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="card">
       <h3>Блокировка и удаление</h3>
       {% if u.banned %}
@@ -96,7 +110,7 @@
       <h3>Покупки</h3>
       {% for o in orders %}
         <div class="log-row"><span>{{ fmt_date(o.created_at, True) }}</span><b>{{ fmt_rub(o.amount) }}</b>
-          <span class="muted">{{ {'month': 'месяц', 'forever': 'навсегда'}.get(o.product) }} · {{ {'yoomoney_card': 'ЮMoney, карта', 'yoomoney_wallet': 'ЮMoney, кошелёк', 'card': 'перевод на карту', 'balance': 'с баланса'}.get(o.method) }} · {{ {'pending': 'не оплачен', 'review': 'ждёт проверки', 'paid': 'оплачен', 'rejected': 'отклонён'}.get(o.status) }}</span></div>
+          <span class="muted">{{ ptitle(o.product) }} · {{ {'yoomoney_card': 'ЮMoney, карта', 'yoomoney_wallet': 'ЮMoney, кошелёк', 'card': 'перевод на карту', 'balance': 'с баланса'}.get(o.method) }} · {{ {'pending': 'не оплачен', 'review': 'ждёт проверки', 'paid': 'оплачен', 'rejected': 'отклонён'}.get(o.status) }}</span></div>
       {% else %}<p class="muted">Пока нет.</p>{% endfor %}
     </div>
   </div>
