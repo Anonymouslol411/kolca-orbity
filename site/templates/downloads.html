@@ -9,8 +9,8 @@
       {% for f in files %}
         <div class="dl-row">
           <div>
-            <div class="dl-name">{{ f.name }}</div>
-            <div class="fine">{{ '%.1f' % (f.size / 1048576) }} MB, {{ fmt_date(f.mtime) }}</div>
+            <div class="dl-name">{{ dl_label(f.name) }}</div>
+            <div class="fine">{{ f.name }}, {{ '%.1f' % (f.size / 1048576) }} MB, {{ fmt_date(f.mtime) }}</div>
           </div>
           <a class="btn" href="{{ url_for('download_file', name=f.name) }}">{{ t('download_btn') }}</a>
         </div>

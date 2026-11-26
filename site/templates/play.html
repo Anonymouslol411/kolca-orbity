@@ -9,6 +9,6 @@
 </head>
 <body class="play">
 <iframe src="{{ url_for('game_file', game=game) }}" allow="autoplay; fullscreen" title="{{ t('game_' + game) }}"></iframe>
-<a class="back" href="{{ url_for('account') }}">← {{ t('back') }}</a>
+<a class="back" href="{{ url_for('games_page') }}">← {{ t('back') }}</a>
 </body>
 </html>

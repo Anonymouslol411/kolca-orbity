@@ -11,7 +11,7 @@
   {% if msg in msgs %}<div class="note {{ msgs[msg][0] }}">{{ msgs[msg][1] }}</div>{% endif %}
 
   <p class="muted">«Кольца» и «Орбиты» встроены в сайт и входят в подписку. Здесь — остальные игры для раздела «Игры»:
-    продаваемые разово (покупатель получает файл игры), бесплатные по ссылке (Roblox, itch.io) и те, что выйдут позже.</p>
+    с файлом на сайте, по ссылке (Roblox, itch.io, GitHub) и те, что выйдут позже. Все игры бесплатные.</p>
 
   <div class="admin-games">
     <div class="card">
@@ -21,9 +21,9 @@
         {% if g.cover %}<div class="disc cover-img"><img src="{{ url_for('cover_file', name=g.cover) }}" alt=""></div>
         {% else %}<div class="disc disc-hue" style="--h: {{ g.hue }}"></div>{% endif %}
         <div>
-          <b>{{ g.title }}</b> {% if g.status == 'soon' %}<span class="tag">скоро</span>{% elif g.status == 'paid' %}<span class="tag">{{ fmt_rub(g.price) }}</span>{% else %}<span class="tag">по ссылке</span>{% endif %}
+          <b>{{ g.title }}</b> {% if g.status == 'soon' %}<span class="tag">скоро</span>{% elif g.status == 'paid' %}<span class="tag">файл</span>{% else %}<span class="tag">по ссылке</span>{% endif %}
           <div class="fine">{{ g.description|truncate(90) }}{% if g.url %}<br>{{ g.url|truncate(60) }}{% endif %}
-            {% if g.status == 'paid' %}<br>Файл: {{ g.file or 'не выбран — покупатели пока не смогут скачать' }} · купили: {{ sold.get(g.id, 0) }}{% endif %}</div>
+            {% if g.status == 'paid' %}<br>Файл: {{ g.file or 'не выбран — скачать пока нельзя' }}{% endif %}</div>
         </div>
         <div>
           <a href="{{ url_for('admin.games', edit=g.id) }}">Изменить</a>
@@ -49,10 +49,9 @@
           <select class="field" name="status">
             <option value="soon" {% if not cur or cur.status == 'soon' %}selected{% endif %}>Скоро — анонс, без кнопки</option>
             <option value="live" {% if cur and cur.status == 'live' %}selected{% endif %}>По ссылке — кнопка «Открыть» ведёт по ссылке</option>
-            <option value="paid" {% if cur and cur.status == 'paid' %}selected{% endif %}>Продаётся — разовая покупка на сайте, покупатель скачивает файл</option>
+            <option value="paid" {% if cur and cur.status == 'paid' %}selected{% endif %}>Файл на сайте — кнопка «Скачать бесплатно» отдаёт выбранный файл</option>
           </select></label>
-        <label>Цена, ₽ (для «Продаётся»)<input type="text" name="price" inputmode="decimal" placeholder="5000" value="{{ '%g' % cur.price if cur and cur.price else '' }}"></label>
-        <label>Файл игры (для «Продаётся») — сначала загрузите его во вкладке «Файлы»
+        <label>Файл игры (для «Файл на сайте») — сначала загрузите его во вкладке «Файлы»
           <select class="field" name="file">
             <option value="">— не выбран —</option>
             {% for f in files %}<option value="{{ f.name }}" {% if cur and cur.file == f.name %}selected{% endif %}>{{ f.name }} ({{ '%.0f' % (f.size / 1048576) }} МБ)</option>{% endfor %}
