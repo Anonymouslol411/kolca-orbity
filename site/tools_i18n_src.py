@@ -952,6 +952,21 @@ R9 = {
 for code in T:
     T[code].update(R9[code])
 
+
+R10 = {
+ 'ru': dict(games_free_dl='Скачать бесплатно', games_free_note='Бесплатная игра, файл скачивается с GitHub.'),
+ 'en': dict(games_free_dl='Download for free', games_free_note='A free game; the file downloads from GitHub.'),
+ 'uk': dict(games_free_dl='Завантажити безкоштовно', games_free_note='Безкоштовна гра, файл завантажується з GitHub.'),
+ 'es': dict(games_free_dl='Descargar gratis', games_free_note='Juego gratuito; el archivo se descarga de GitHub.'),
+ 'de': dict(games_free_dl='Kostenlos herunterladen', games_free_note='Kostenloses Spiel, die Datei kommt von GitHub.'),
+ 'fr': dict(games_free_dl='Télécharger gratuitement', games_free_note='Jeu gratuit, le fichier se télécharge depuis GitHub.'),
+ 'pt': dict(games_free_dl='Baixar grátis', games_free_note='Jogo gratuito; o arquivo é baixado do GitHub.'),
+ 'tr': dict(games_free_dl='Ücretsiz indir', games_free_note='Ücretsiz oyun; dosya GitHub’dan indirilir.'),
+ 'zh': dict(games_free_dl='免费下载', games_free_note='免费游戏，文件从 GitHub 下载。'),
+}
+for code in T:
+    T[code].update(R10[code])
+
 base = set(T['en'])
 for code, tr in T.items():
     missing = base - set(tr)

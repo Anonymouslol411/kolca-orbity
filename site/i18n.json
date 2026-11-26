@@ -221,7 +221,9 @@
   "game_need_account": "Чтобы купить, создайте аккаунт или",
   "my_games": "Мои игры",
   "game_deleted": "Игра удалена",
-  "game_or_forever": "Или возьмите «Навсегда» за {price} — эта игра и все остальные игры сайта, включая будущие."
+  "game_or_forever": "Или возьмите «Навсегда» за {price} — эта игра и все остальные игры сайта, включая будущие.",
+  "games_free_dl": "Скачать бесплатно",
+  "games_free_note": "Бесплатная игра, файл скачивается с GitHub."
  },
  "en": {
   "tagline": "music games",
@@ -399,7 +401,9 @@
   "game_need_account": "To buy, create an account or",
   "my_games": "My games",
   "game_deleted": "Game removed",
-  "game_or_forever": "Or get Forever for {price}: this game and every other game on the site, including future ones."
+  "game_or_forever": "Or get Forever for {price}: this game and every other game on the site, including future ones.",
+  "games_free_dl": "Download for free",
+  "games_free_note": "A free game; the file downloads from GitHub."
  },
  "uk": {
   "tagline": "музичні ігри",
@@ -577,7 +581,9 @@
   "game_need_account": "Щоб купити, створіть акаунт або",
   "my_games": "Мої ігри",
   "game_deleted": "Гру видалено",
-  "game_or_forever": "Або візьміть «Назавжди» за {price} — ця гра й усі інші ігри сайту, зокрема майбутні."
+  "game_or_forever": "Або візьміть «Назавжди» за {price} — ця гра й усі інші ігри сайту, зокрема майбутні.",
+  "games_free_dl": "Завантажити безкоштовно",
+  "games_free_note": "Безкоштовна гра, файл завантажується з GitHub."
  },
  "es": {
   "tagline": "juegos musicales",
@@ -755,7 +761,9 @@
   "game_need_account": "Para comprar, crea una cuenta o",
   "my_games": "Mis juegos",
   "game_deleted": "Juego eliminado",
-  "game_or_forever": "O consigue Para siempre por {price}: este juego y todos los demás del sitio, incluidos los futuros."
+  "game_or_forever": "O consigue Para siempre por {price}: este juego y todos los demás del sitio, incluidos los futuros.",
+  "games_free_dl": "Descargar gratis",
+  "games_free_note": "Juego gratuito; el archivo se descarga de GitHub."
  },
  "de": {
   "tagline": "Musikspiele",
@@ -933,7 +941,9 @@
   "game_need_account": "Zum Kaufen erstelle ein Konto oder",
   "my_games": "Meine Spiele",
   "game_deleted": "Spiel entfernt",
-  "game_or_forever": "Oder nimm Für immer für {price}: dieses Spiel und alle anderen Spiele der Seite, auch künftige."
+  "game_or_forever": "Oder nimm Für immer für {price}: dieses Spiel und alle anderen Spiele der Seite, auch künftige.",
+  "games_free_dl": "Kostenlos herunterladen",
+  "games_free_note": "Kostenloses Spiel, die Datei kommt von GitHub."
  },
  "fr": {
   "tagline": "jeux musicaux",
@@ -1111,7 +1121,9 @@
   "game_need_account": "Pour acheter, créez un compte ou",
   "my_games": "Mes jeux",
   "game_deleted": "Jeu supprimé",
-  "game_or_forever": "Ou prenez Pour toujours à {price} : ce jeu et tous les autres jeux du site, y compris à venir."
+  "game_or_forever": "Ou prenez Pour toujours à {price} : ce jeu et tous les autres jeux du site, y compris à venir.",
+  "games_free_dl": "Télécharger gratuitement",
+  "games_free_note": "Jeu gratuit, le fichier se télécharge depuis GitHub."
  },
  "pt": {
   "tagline": "jogos musicais",
@@ -1289,7 +1301,9 @@
   "game_need_account": "Para comprar, crie uma conta ou",
   "my_games": "Meus jogos",
   "game_deleted": "Jogo removido",
-  "game_or_forever": "Ou fique com Para sempre por {price}: este jogo e todos os outros do site, incluindo futuros."
+  "game_or_forever": "Ou fique com Para sempre por {price}: este jogo e todos os outros do site, incluindo futuros.",
+  "games_free_dl": "Baixar grátis",
+  "games_free_note": "Jogo gratuito; o arquivo é baixado do GitHub."
  },
  "tr": {
   "tagline": "müzik oyunları",
@@ -1467,7 +1481,9 @@
   "game_need_account": "Satın almak için hesap oluşturun veya",
   "my_games": "Oyunlarım",
   "game_deleted": "Oyun kaldırıldı",
-  "game_or_forever": "Ya da {price} karşılığında Ömür boyu alın: bu oyun ve gelecektekiler dahil sitedeki tüm oyunlar."
+  "game_or_forever": "Ya da {price} karşılığında Ömür boyu alın: bu oyun ve gelecektekiler dahil sitedeki tüm oyunlar.",
+  "games_free_dl": "Ücretsiz indir",
+  "games_free_note": "Ücretsiz oyun; dosya GitHub’dan indirilir."
  },
  "zh": {
   "tagline": "音乐游戏",
@@ -1645,6 +1661,8 @@
   "game_need_account": "购买前请先注册，或",
   "my_games": "我的游戏",
   "game_deleted": "游戏已删除",
-  "game_or_forever": "或以 {price} 购买“永久”：包含这款游戏以及本站所有其他游戏，包括未来的新游戏。"
+  "game_or_forever": "或以 {price} 购买“永久”：包含这款游戏以及本站所有其他游戏，包括未来的新游戏。",
+  "games_free_dl": "免费下载",
+  "games_free_note": "免费游戏，文件从 GitHub 下载。"
  }
 }

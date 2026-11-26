@@ -198,7 +198,7 @@ def db_connect():
             pass                # другой процесс уже добавил
     con.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_tg ON users(tg_id) WHERE tg_id IS NOT NULL')
     gcols = {r[1] for r in con.execute('PRAGMA table_info(games)')}
-    for col, ddl in (('price', 'REAL'), ('file', 'TEXT')):
+    for col, ddl in (('price', 'REAL'), ('file', 'TEXT'), ('shots', 'TEXT')):
         if col not in gcols:
             try:
                 con.execute(f'ALTER TABLE games ADD COLUMN {col} {ddl}')
@@ -460,9 +460,9 @@ def game_page(gid):
     row = con.execute('SELECT * FROM games WHERE id=?', (gid,)).fetchone()
     if not row:
         abort(404)
-    if row['status'] != 'paid':
-        return redirect(url_for('games_page'))
-    return render_template('game.html', g_=row, owned=owns_game(con, g.user, gid))
+    shots = [n for n in json.loads(row['shots'] or '[]') if isinstance(n, str)]
+    return render_template('game.html', g_=row, shots=shots,
+                           owned=row['status'] == 'paid' and owns_game(con, g.user, gid))
 
 
 @app.route('/covers/<name>')
@@ -1346,7 +1346,10 @@ def order_action(oid, action):
 
 def save_cover(f, gid):
     """Сохранить обложку игры (PNG/JPG/WebP до 5 МБ, тип проверяется по содержимому)."""
-    data = f.read(COVER_LIMIT + 1)
+    return save_image_bytes(f.read(COVER_LIMIT + 1), gid)
+
+
+def save_image_bytes(data, gid):
     if not data or len(data) > COVER_LIMIT:
         return None
     ext = next((e for magic, e in COVER_EXT.items() if data.startswith(magic)), None)
@@ -1375,6 +1378,8 @@ def games():
         row = con.execute('SELECT * FROM games WHERE id=?', (gid,)).fetchone() if gid else None
         if act == 'delete' and row:
             drop_cover(row['cover'])
+            for name in json.loads(row['shots'] or '[]'):
+                drop_cover(name)
             con.execute('DELETE FROM games WHERE id=?', (gid,))
             con.execute('DELETE FROM user_games WHERE game_id=?', (gid,))
             con.commit()
@@ -1563,6 +1568,76 @@ def cli_yoomoney_check():
     print(f'Проверено неоплаченных заказов, найдено оплат: {check_pending_orders(con)}')
 
 
+def gh_get(url, limit=5_000_000, accept='application/vnd.github+json'):
+    req = urllib.request.Request(url, headers={'Accept': accept, 'User-Agent': 'kolca-orbity-site'})
+    with urllib.request.urlopen(req, timeout=60, context=_TLS) as r:
+        return r.read(limit + 1)
+
+
+def cli_github_game(repo, price=None, title=None):
+    """Добавить (или обновить) игру в каталоге из открытого репозитория GitHub:
+    описание и скриншоты — из репозитория, файл — из последнего релиза.
+    Без цены игра бесплатная: кнопка ведёт на скачивание с GitHub. С ценой — файл копируется на сервер и продаётся."""
+    if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
+        sys.exit('Укажите репозиторий как владелец/имя, например Anonymouslol411/otklik')
+    api = f'https://api.github.com/repos/{repo}'
+    try:
+        info = json.loads(gh_get(api))
+        rel = json.loads(gh_get(api + '/releases/latest'))
+        tree = json.loads(gh_get(f"{api}/git/trees/{info['default_branch']}?recursive=1"))
+    except urllib.error.HTTPError as e:
+        sys.exit(f'GitHub ответил {e.code}: репозиторий или релиз не найден (репозиторий должен быть открытым)')
+    except (urllib.error.URLError, TimeoutError) as e:
+        sys.exit(f'Нет связи с GitHub: {e}')
+    assets = [a for a in rel.get('assets', []) if Path(a['name']).suffix.lower() in DOWNLOAD_EXT]
+    if not assets:
+        sys.exit('В последнем релизе нет файлов .exe / .zip / .apk')
+    main = max(assets, key=lambda a: a['size'])          # основной файл игры, а не маленький загрузчик
+    title = (title or info.get('name') or repo.split('/')[1]).strip()[:60]
+    desc = (info.get('description') or '').strip()[:300]
+    con = db_connect()
+    row = con.execute('SELECT * FROM games WHERE title=?', (title,)).fetchone()
+    gid = row['id'] if row else con.execute(
+        "INSERT INTO games (title, description, status, hue, sort, created_at) VALUES (?, ?, 'soon', 20, 50, ?)",
+        (title, desc, now())).lastrowid
+    con.commit()
+    if price:
+        if main['size'] > UPLOAD_LIMIT * 5:
+            sys.exit('Файл слишком большой')
+        name = secure_filename(main['name'])
+        print(f'Скачиваю {main["name"]} ({main["size"] / 1048576:.1f} МБ)…')
+        DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        data = gh_get(main['browser_download_url'], limit=main['size'] + 1024, accept='application/octet-stream')
+        (DOWNLOADS_DIR / name).write_bytes(data)
+        status, url, file = 'paid', info.get('html_url'), name
+    else:
+        status, url, file = 'live', main['browser_download_url'], None
+    # скриншоты из папки screenshots/ (или любые картинки репозитория): обложка — banner, если есть
+    imgs = [x['path'] for x in tree.get('tree', []) if x['type'] == 'blob' and x.get('size', 0) <= COVER_LIMIT
+            and re.search(r'\.(jpe?g|png|webp)$', x['path'], re.I)]
+    imgs.sort(key=lambda p: (not p.lower().startswith('screenshots/'), 'banner' not in p.lower(), p))
+    raw = f"https://raw.githubusercontent.com/{repo}/{info['default_branch']}/"
+    saved = []
+    for path in imgs[:9]:
+        try:
+            name = save_image_bytes(gh_get(raw + urllib.parse.quote(path), limit=COVER_LIMIT), gid)
+        except (urllib.error.URLError, TimeoutError):
+            name = None
+        if name:
+            saved.append((path, name))
+    cover = next((n for p, n in saved if 'banner' in p.lower()), saved[0][1] if saved else None)
+    shots = [n for p, n in saved if n != cover][:8]
+    old = con.execute('SELECT cover, shots FROM games WHERE id=?', (gid,)).fetchone()
+    for n in [old['cover'], *json.loads(old['shots'] or '[]')]:
+        if n and n != cover and n not in shots:
+            drop_cover(n)
+    con.execute('UPDATE games SET title=?, description=?, status=?, url=?, price=?, file=?, cover=?, shots=? WHERE id=?',
+                (title, desc, status, url, float(price) if price else None, file, cover, json.dumps(shots), gid))
+    con.commit()
+    print(f'Готово: «{title}» — {"продаётся за " + fmt_rub(float(price)) if price else "бесплатно, скачивание с GitHub"}, '
+          f'скриншотов: {len(shots)}{", есть обложка" if cover else ""}. Страница: {BASE_URL}/games/{gid}')
+
+
 def cli_add_file(path):
     src = Path(path)
     if not src.is_file() or src.suffix.lower() not in DOWNLOAD_EXT:
@@ -1591,6 +1666,12 @@ if __name__ == '__main__':
             ok = send_mail(sys.argv[2], f'{SITE_NAME}: проверка почты', 'Если вы читаете это письмо — почта сайта настроена правильно.')
         print('Письмо отправлено — проверьте ящик (и «Спам»).' if ok else 'Не удалось отправить — ошибка выше.')
         sys.exit(0 if ok else 1)
+    elif cmd == 'github-game' and len(sys.argv) > 2:
+        args = sys.argv[2:]
+        price = next((a for a in args[1:] if re.fullmatch(r'\d+(\.\d+)?', a)), None)
+        title = next((a for a in args[1:] if a != price), None)
+        with app.test_request_context():
+            cli_github_game(args[0], price, title)
     elif cmd == 'add-file' and len(sys.argv) > 2:
         cli_add_file(sys.argv[2])
     elif cmd == 'dev':
