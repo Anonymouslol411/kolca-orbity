@@ -123,12 +123,10 @@ def tg_bot_username(con=None):
 
 
 def methods_available():
-    m = []
-    if YOOMONEY_WALLET and yoomoney_token():      # оплату ЮMoney проверяет сервер через API — без токена способ выключен
-        m += ['yoomoney_card', 'yoomoney_wallet']
-    if CARD_NUMBER:
-        m.append('card')
-    return m
+    """Внешних способов оплаты на сайте нет: покупки оплачиваются балансом,
+    а баланс пополняется звёздами в Telegram-боте. Код ЮMoney и перевода на карту оставлен только
+    для заказов, созданных раньше (их ещё можно подтвердить в админке)."""
+    return []
 
 
 # ---------------------------------------------------------------- база данных
@@ -1183,7 +1181,8 @@ def users():
         revenue_month=one("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='paid' AND method!='balance' AND paid_at>?", now() - 30 * 86400),
         revenue_total=one("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='paid' AND method!='balance'"),
     )
-    stats['ym'] = bool(YOOMONEY_WALLET and yoomoney_token(con))
+    stats['ym'] = True        # ЮMoney отключён — предупреждение в админке не нужно
+    stats['tg'] = bool(tg_bot_username(con))
     return render_template('admin_users.html', rows=rows, stats=stats, q=q, f=flt, page=page,
                            pages=max(1, (total + 49) // 50), total=total)
 

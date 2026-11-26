@@ -5,16 +5,14 @@
 #   admin-password   сменить пароль администратора
 #   admin-url        показать адрес админки
 #   duckdns          подключить бесплатный адрес имя.duckdns.org
-#   yoomoney-auth    подключить API ЮMoney (сервер сам проверяет оплаты)
-#   yoomoney-check   проверить связь с ЮMoney и неоплаченные заказы
-#   telegram         подключить платёжного Telegram-бота (оплата звёздами)
+#   telegram         подключить Telegram-бота: только через него пополняется баланс
 #   mail             настроить почту (код подтверждения при регистрации, сброс пароля)
 #   mail-test АДРЕС  отправить пробное письмо
 #   add-file ФАЙЛ    добавить exe/apk в раздачу для покупателей «Навсегда»
 #   github-game РЕПО [ЦЕНА] [НАЗВАНИЕ]  добавить игру из GitHub (описание, скриншоты, файл релиза)
 #   files            список файлов в раздаче
 #   stats            сколько пользователей и оплат
-#   config           заново пройти настройку (домен, цены, ЮMoney, карта) и перезапустить
+#   config           заново пройти настройку (домен, цены, бот, почта) и перезапустить
 #   restart | stop | start | status | logs
 #   update           скачать новую версию из GitHub и перезапустить
 #   backup           сохранить копию базы в ./backups
@@ -111,34 +109,6 @@ configure() {
   ask "Цена «Навсегда», ₽" "$(env_get PRICE_FOREVER)"; env_set PRICE_FOREVER "${REPLY//[^0-9]/}"
   ask "Цена «Месяц онлайн», ₽ (0 — убрать тариф)" "$(env_get PRICE_MONTH)"; env_set PRICE_MONTH "${REPLY//[^0-9]/}"
 
-  echo; echo "${BOLD}ЮMoney${NC} — оплата картой; факт оплаты сервер проверяет сам через API ЮMoney."
-  echo "  1) Заведите кошелёк на yoomoney.ru (бесплатно) и пройдите идентификацию — без неё карты почти не принимаются."
-  echo "  2) Зарегистрируйте приложение: yoomoney.ru/myservices/new"
-  echo "     Адрес сайта: $(env_get BASE_URL)   Redirect URI: $(env_get BASE_URL)/yoomoney/oauth"
-  echo "     (если ЮMoney не примет адрес с http — укажите https://localhost/yoomoney/oauth и такой же впишите ниже)"
-  echo "     Галочку «Проверять подлинность приложения (OAuth2 client_secret)» лучше включить."
-  if [[ "$(env_get BASE_URL)" == https://* ]]; then
-  echo "  3) (по желанию, для мгновенного зачисления) Настройки → HTTP-уведомления:"
-  echo "     адрес $(env_get BASE_URL)/webhooks/yoomoney, «Отправлять уведомления», «Показать секрет»."
-  else
-  echo "  Без домена уведомления ЮMoney не работают (им нужен https) — сервер сам проверяет оплаты раз в минуту."
-  fi
-  ask "Номер кошелька ЮMoney (41001…; пусто — не подключать)" "$(env_get YOOMONEY_WALLET)"; env_set YOOMONEY_WALLET "${REPLY//[^0-9]/}"
-  if [ -n "$(env_get YOOMONEY_WALLET)" ]; then
-    ask "client_id приложения ЮMoney" "$(env_get YOOMONEY_CLIENT_ID)"; env_set YOOMONEY_CLIENT_ID "${REPLY//[^A-Za-z0-9]/}"
-    ask "Redirect URI, который вы указали в приложении" "$(env_get YOOMONEY_REDIRECT_URI || true)"
-    [ -z "$REPLY" ] && REPLY="$(env_get BASE_URL)/yoomoney/oauth"
-    env_set YOOMONEY_REDIRECT_URI "$REPLY"
-    ask_secret YOOMONEY_CLIENT_SECRET "client_secret приложения (если включали; пусто — нет)"
-    ask_secret YOOMONEY_SECRET "Секрет HTTP-уведомлений (пусто — без уведомлений)"
-  fi
-
-  echo; echo "${BOLD}Перевод на карту${NC} — запасной способ, оплату подтверждаете вы в админке."
-  ask "Номер карты для переводов (пусто — не показывать)" "$(env_get CARD_NUMBER)"; env_set CARD_NUMBER "${REPLY//[^0-9]/}"
-  if [ -n "$(env_get CARD_NUMBER)" ]; then
-    ask "Имя получателя, как его покажет банк (например Иван И.)" "$(env_get CARD_HOLDER)"; env_set CARD_HOLDER "$REPLY"
-    ask "Банк" "$(env_get CARD_BANK)"; env_set CARD_BANK "$REPLY"
-  fi
   telegram_questions
   mail_questions
   chmod 600 .env
@@ -263,9 +233,7 @@ case "$cmd" in
     dc up -d --build
     sleep 3
     admin_password
-    if [ -n "$(env_get YOOMONEY_CLIENT_ID)" ]; then
-      yoomoney_auth || warn "API ЮMoney не подключён — позже: sudo bash manage.sh yoomoney-auth"
-    fi
+    [ -n "$(env_get TG_BOT_TOKEN)" ] || warn "Без Telegram-бота пополнить баланс нельзя: sudo bash manage.sh telegram"
     echo; say "Готово!"
     echo "Сайт:    ${BOLD}$(env_get BASE_URL)${NC}"
     admin_url
@@ -281,7 +249,6 @@ case "$cmd" in
       wait_dns "$REPLY"
       dc up -d --force-recreate
       say "Сайт: https://$REPLY"
-      warn "Если ЮMoney уже был настроен — поменяйте Redirect URI приложения на https://$REPLY/yoomoney/oauth и выполните yoomoney-auth"
     fi
     ;;
   duckdns-update) duckdns_update >/dev/null || true ;;
@@ -341,6 +308,6 @@ case "$cmd" in
     say "Копия базы: $f"
     ;;
   *)
-    sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 esac
