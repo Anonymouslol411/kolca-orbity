@@ -5,6 +5,7 @@
   <div class="auth card">
     <h1>{{ t('title_' + mode) }}</h1>
     {% if error %}<div class="note warn">{{ error }}</div>{% endif %}
+    {% if notice %}<div class="note ok">{{ notice }}</div>{% endif %}
 
     {% if mode == 'register' %}
       <p class="muted">{{ t('register_sub', days=trial_days) }}</p>
@@ -17,6 +18,20 @@
         <button class="btn wide" type="submit">{{ t('btn_register') }}</button>
       </form>
       <p class="muted">{{ t('have_account') }} <a href="{{ url_for('login') }}">{{ t('nav_login') }}</a></p>
+
+    {% elif mode == 'verify' %}
+      <p class="muted">{{ t('verify_text', email=email) }}</p>
+      <form method="post">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>{{ t('verify_code') }}<input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"
+          required autocomplete="one-time-code" autofocus class="code-input"></label>
+        <button class="btn wide" type="submit">{{ t('btn_verify') }}</button>
+      </form>
+      <form method="post" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="resend">
+        <button class="link-btn" type="submit">{{ t('verify_resend') }}</button>
+      </form>
+      <p class="muted"><a href="{{ url_for('register') }}">{{ t('verify_change') }}</a></p>
 
     {% elif mode == 'login' %}
       <form method="post">
