@@ -353,6 +353,12 @@ def pick_lang():
     return session.get('lang') if session.get('lang') in LANGS else 'ru'
 
 
+# Профили (аккаунты посетителей) убраны с сайта. Код и база оставлены — вернуть можно настройкой PROFILES_ENABLED=1.
+PROFILES_ENABLED = (env('PROFILES_ENABLED') or '0') == '1'
+PROFILE_ENDPOINTS = {'register', 'verify', 'login', 'logout', 'forgot', 'reset', 'account', 'change_password',
+                     'account_telegram', 'buy', 'pay', 'pay_sent', 'pay_check'}
+
+
 @app.before_request
 def setup_request():
     g.lang = pick_lang()
@@ -360,7 +366,14 @@ def setup_request():
     # большие запросы разрешены только для загрузки файлов в админке
     if (request.content_length or 0) > SMALL_REQUEST and request.endpoint not in ('admin.downloads', 'admin.games'):
         abort(413)
-    uid = session.get('uid')
+    if not PROFILES_ENABLED:
+        # профилей на сайте нет: страницы аккаунта, входа и покупок не существуют, вход не запоминается
+        if request.endpoint in PROFILE_ENDPOINTS:
+            abort(404)
+        for k in ('uid', 'sv', 'reg_email'):
+            if k in session:
+                session.pop(k)
+    uid = session.get('uid') if PROFILES_ENABLED else None
     if uid:
         u = db().execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
         if u and not u['banned'] and session.get('sv') == u['session_ver']:
