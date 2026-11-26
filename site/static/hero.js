@@ -46,7 +46,7 @@
         gg.addColorStop(0, `rgba(255,236,200,${n.f})`); gg.addColorStop(1, 'rgba(255,170,60,0)');
         ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, r * 5, 0, Math.PI * 2); ctx.fill();
       }
-      ctx.fillStyle = n.f > 0.02 ? `rgba(255,255,255,${0.4 + n.f})` : '#0f1233';
+      ctx.fillStyle = n.f > 0.02 ? `rgba(255,255,255,${0.4 + n.f})` : '#000';
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = n.k === 0 ? 'rgba(255,190,90,0.95)' : 'rgba(243,240,230,0.7)'; ctx.stroke();
     }

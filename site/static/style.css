@@ -1,16 +1,16 @@
 /* Кольца и Орбиты — ночная сцена: индиго, свет рампы (янтарь), спектр — только в обложках игр */
 :root {
-  --night: #0f1233;
-  --deep: #0a0c26;
-  --panel: #171b45;
-  --panel2: #1e2354;
-  --rule: #2c3170;
-  --paper: #f3f0e6;
-  --soft: #d4d2ea;
-  --dim: #9fa2cf;
+  --night: #000;
+  --deep: #04050c;
+  --panel: rgba(13, 15, 30, .72);
+  --panel2: rgba(28, 31, 58, .8);
+  --rule: rgba(160, 170, 255, .14);
+  --paper: #eeedf6;
+  --soft: #c9c8de;
+  --dim: #8d8fae;
   --amber: #ffb648;
-  --amber-hi: #ffc96e;
-  --amber-ink: #2a1900;
+  --amber-hi: #ffcd78;
+  --amber-ink: #241500;
   --mint: #46e0a6;
   --rose: #ff6f91;
   --r-lg: 22px;
@@ -22,7 +22,7 @@
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
-  margin: 0; color: var(--paper); background: var(--night);
+  margin: 0; color: var(--paper); background: #000;
   font: 17px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", sans-serif;
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
@@ -41,11 +41,43 @@ p { margin: 0 0 1em; }
 .fine.warn, .warn-text { color: var(--rose); }
 .center { text-align: center; }
 
+/* ---------- космос: звёзды и туманности за всем содержимым ---------- */
+body::before, body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+body::before {
+  background:
+    radial-gradient(1px 1px at 12% 18%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 27% 72%, rgba(255,255,255,.8) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 41% 33%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 58% 84%, rgba(255,255,255,.7) 50%, transparent 51%),
+    radial-gradient(1px 1px at 66% 12%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 79% 58%, rgba(255,236,200,.9) 50%, transparent 51%),
+    radial-gradient(1px 1px at 91% 27%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 6% 91%, rgba(200,210,255,.8) 50%, transparent 51%),
+    radial-gradient(1px 1px at 47% 52%, rgba(255,255,255,.6) 50%, transparent 51%),
+    radial-gradient(1px 1px at 85% 90%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 34% 6%, rgba(200,210,255,.9) 50%, transparent 51%),
+    radial-gradient(1px 1px at 96% 70%, rgba(255,255,255,.7) 50%, transparent 51%);
+  background-size: 100% 100%;
+}
+body::after {
+  background:
+    radial-gradient(1px 1px at 20% 40%, rgba(255,255,255,.55) 50%, transparent 51%) 0 0 / 220px 220px,
+    radial-gradient(1px 1px at 70% 15%, rgba(200,210,255,.45) 50%, transparent 51%) 0 0 / 170px 170px,
+    radial-gradient(1px 1px at 45% 80%, rgba(255,255,255,.4) 50%, transparent 51%) 0 0 / 130px 130px,
+    radial-gradient(ellipse 60% 40% at 85% 10%, rgba(110, 60, 220, .16), transparent 70%),
+    radial-gradient(ellipse 50% 45% at 5% 75%, rgba(30, 90, 200, .14), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 55% 45%, rgba(255, 140, 60, .05), transparent 70%);
+  animation: twinkle 9s ease-in-out infinite alternate;
+}
+@keyframes twinkle { from { opacity: .75; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { body::after { animation: none; } }
+main { position: relative; z-index: 0; }
+
 /* ---------- шапка ---------- */
 .top {
   position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 18px;
-  padding: 14px clamp(16px, 4vw, 40px); background: rgba(15, 18, 51, .86); backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(44, 49, 112, .7); flex-wrap: wrap;
+  padding: 14px clamp(16px, 4vw, 40px); background: rgba(0, 0, 0, .62); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--rule); flex-wrap: wrap;
 }
 .logo { display: flex; align-items: center; gap: 11px; color: var(--paper); text-decoration: none; font-weight: 800; font-size: 19px; letter-spacing: -.01em; }
 .logo-mark { position: relative; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--paper); flex: none; }
@@ -57,7 +89,7 @@ nav > a:hover, nav > a.on { color: var(--paper); background: var(--panel2); }
 .picker select, .cur-form select {
   background: transparent; color: var(--soft); border: 1px solid var(--rule); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 14px;
 }
-.picker select option { background: var(--panel); }
+.picker select option { background: #0d0f1e; }
 
 /* ---------- кнопки ---------- */
 .btn {
@@ -91,8 +123,8 @@ nav .btn.small { margin-left: 4px; }
 .cta-row.left { justify-content: flex-start; }
 .section.center .cta-row, .cta-row.centered { justify-content: center; }
 .dial { position: relative; aspect-ratio: 1; width: 100%; max-width: 520px; justify-self: center; }
-.dial::before { content: ""; position: absolute; inset: 6%; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 182, 72, .10) 0%, rgba(80, 70, 220, .22) 45%, rgba(15, 18, 51, 0) 70%); }
+.dial::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 182, 72, .12) 0%, rgba(90, 70, 230, .24) 40%, rgba(40, 20, 120, .12) 58%, rgba(0, 0, 0, 0) 72%); }
 #hero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hero-price { color: var(--dim); font-size: 15px; }
 .hero-price b { color: var(--paper); font-weight: 700; }
@@ -100,13 +132,14 @@ nav .btn.small { margin-left: 4px; }
 /* ---------- секции ---------- */
 .section { max-width: var(--wrap); margin: 0 auto; padding: clamp(44px, 6vw, 80px) clamp(16px, 4vw, 40px); }
 .section.narrow { max-width: 640px; }
-.section.tint { max-width: none; background: var(--deep); padding-left: 0; padding-right: 0; }
+.section.tint { max-width: none; background: linear-gradient(180deg, rgba(10, 12, 30, 0), rgba(10, 12, 30, .55) 20%, rgba(10, 12, 30, .55) 80%, rgba(10, 12, 30, 0)); padding-left: 0; padding-right: 0; }
 .section.tint > .in { max-width: var(--wrap); margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 26px; }
 .section-head h2 { margin: 0; }
 .section-head p { margin: 0; color: var(--dim); max-width: 52ch; }
 
-.card { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 24px; margin-bottom: 18px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 24px; margin-bottom: 18px;
+  backdrop-filter: blur(10px); }
 .card p { color: var(--soft); }
 .cards { display: grid; gap: 18px; }
 .cards.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
@@ -122,9 +155,9 @@ nav .btn.small { margin-left: 4px; }
 .game-item p { color: var(--soft); font-size: 15px; margin: 0 0 14px; flex: 1; }
 .game-item .btn, .game-item .pill { align-self: flex-start; }
 .disc { position: relative; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: #000;
-  box-shadow: 0 0 0 1px var(--rule), 0 22px 50px rgba(0, 0, 0, .35); }
+  box-shadow: 0 0 0 1px var(--rule), 0 0 60px rgba(120, 110, 255, .18), 0 22px 50px rgba(0, 0, 0, .6); }
 .disc::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14%; height: 14%; transform: translate(-50%, -50%);
-  border-radius: 50%; background: var(--night); box-shadow: 0 0 0 3px rgba(243, 240, 230, .85); }
+  border-radius: 50%; background: #000; box-shadow: 0 0 0 3px rgba(243, 240, 230, .85); }
 .disc img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .disc.cover-img::after { display: none; }
 .disc-kolca { background:
@@ -159,7 +192,7 @@ nav .btn.small { margin-left: 4px; }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; align-items: stretch; }
 .plan { position: relative; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 28px; }
 .plan form, .plan > .btn, .plan > .note { margin-top: auto; }
-.plan.best { background: linear-gradient(180deg, #262252, var(--panel) 60%); border: 1.5px solid var(--amber); }
+.plan.best { background: linear-gradient(180deg, rgba(40, 34, 90, .8), var(--panel) 60%); border: 1.5px solid var(--amber); }
 .plan.small-plan { background: transparent; }
 .plan-head h3 { margin-bottom: 10px; }
 .plan-price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -182,7 +215,7 @@ nav .btn.small { margin-left: 4px; }
 form label { display: block; margin: 0 0 14px; color: var(--dim); font-size: 14px; }
 form input[type=email], form input[type=password], form input[type=text], form input[type=url], form input[type=number], form textarea, form select.field {
   display: block; width: 100%; margin-top: 6px; padding: 12px 14px; font: inherit; color: var(--paper);
-  background: var(--deep); border: 1px solid var(--rule); border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, .55); border: 1px solid var(--rule); border-radius: var(--r-sm);
 }
 form textarea { min-height: 90px; resize: vertical; }
 form input:focus, form textarea:focus, select:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
@@ -215,7 +248,7 @@ details.card summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
 
 /* ---------- подвал ---------- */
 .foot { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 30px clamp(16px, 4vw, 40px);
-  border-top: 1px solid var(--rule); color: var(--dim); font-size: 14px; background: var(--deep); }
+  border-top: 1px solid var(--rule); color: var(--dim); font-size: 14px; background: rgba(0, 0, 0, .6); position: relative; z-index: 1; }
 .foot-links { display: flex; gap: 18px; flex-wrap: wrap; }
 .foot a { color: var(--dim); }
 
@@ -312,7 +345,7 @@ a.plain:hover { color: var(--amber-hi); }
 /* ---------- поддержка ---------- */
 .support-teaser { display: flex; align-items: center; justify-content: space-between; gap: 24px 40px; flex-wrap: wrap;
   padding: clamp(24px, 4vw, 44px); border-radius: var(--r-lg); border: 1.5px solid var(--amber);
-  background: radial-gradient(circle at 100% 0%, rgba(255, 182, 72, .14), transparent 55%), var(--panel); }
+  background: radial-gradient(circle at 100% 0%, rgba(255, 182, 72, .16), transparent 55%), var(--panel); backdrop-filter: blur(10px); }
 .support-teaser h2 { margin-bottom: 8px; }
 .support-teaser .lead { margin: 0; }
 .amount-presets { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
