@@ -498,7 +498,12 @@ def support():
         elif not DONATE_MIN <= amount <= max_rub:
             error = t('support_range', min=fmt_rub(DONATE_MIN), max=fmt_rub(max_rub))
         else:
-            return redirect(f'https://t.me/{bot}?start=d{amount}')
+            # Не перекидываем сразу: на компьютере без приложения Telegram ссылка tg:// никуда не ведёт.
+            # Даём три пути: приложение, Telegram Web и ручной вариант (написать боту сумму).
+            tg_addr = urllib.parse.quote(f'tg://resolve?domain={bot}&start=d{amount}', safe='')
+            return render_template('support_go.html', bot=bot, amount=amount, stars=stars_price(amount),
+                                   app_url=f'https://t.me/{bot}?start=d{amount}',
+                                   web_url=f'https://web.telegram.org/k/#?tgaddr={tg_addr}')
     total = con.execute("SELECT COUNT(*), COALESCE(SUM(rub),0) FROM tg_payments WHERE kind='donate' AND refunded=0").fetchone()
     return render_template('support.html', bot=bot, error=error, presets=DONATE_PRESETS, min_rub=DONATE_MIN, max_rub=max_rub,
                            star_rub=TG_STAR_RUB, donors=total[0], value=raw[:12])

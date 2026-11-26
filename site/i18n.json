@@ -235,7 +235,12 @@
   "support_range": "Введите сумму от {min} до {max}.",
   "support_count": "Разработку уже поддержали {n} раз. Спасибо!",
   "support_hint": "Нравится игра?",
-  "hero_free": "Все игры бесплатные, без регистрации и рекламы."
+  "hero_free": "Все игры бесплатные, без регистрации и рекламы.",
+  "go_lead": "Оплата пройдёт в нашем Telegram-боте: {stars} ⭐. В боте нажмите «Запустить» — придёт счёт.",
+  "go_app": "Открыть в приложении Telegram",
+  "go_web": "Открыть в Telegram Web (в браузере)",
+  "go_manual": "Не открывается? Найдите в Telegram {bot} и отправьте ему число {amount}.",
+  "go_back": "← Другая сумма"
  },
  "en": {
   "tagline": "music games",
@@ -427,7 +432,12 @@
   "support_range": "Enter an amount from {min} to {max}.",
   "support_count": "Development has been supported {n} times already. Thank you!",
   "support_hint": "Enjoying the game?",
-  "hero_free": "Every game is free, no sign-up and no ads."
+  "hero_free": "Every game is free, no sign-up and no ads.",
+  "go_lead": "Payment happens in our Telegram bot: {stars} ⭐. Press Start in the bot and an invoice arrives.",
+  "go_app": "Open in the Telegram app",
+  "go_web": "Open in Telegram Web (in the browser)",
+  "go_manual": "Not opening? Find {bot} in Telegram and send it the number {amount}.",
+  "go_back": "← Another amount"
  },
  "uk": {
   "tagline": "музичні ігри",
@@ -619,7 +629,12 @@
   "support_range": "Введіть суму від {min} до {max}.",
   "support_count": "Розробку вже підтримали {n} разів. Дякуємо!",
   "support_hint": "Подобається гра?",
-  "hero_free": "Усі ігри безкоштовні, без реєстрації й реклами."
+  "hero_free": "Усі ігри безкоштовні, без реєстрації й реклами.",
+  "go_lead": "Оплата пройде в нашому Telegram-боті: {stars} ⭐. У боті натисніть «Почати» — прийде рахунок.",
+  "go_app": "Відкрити в застосунку Telegram",
+  "go_web": "Відкрити в Telegram Web (у браузері)",
+  "go_manual": "Не відкривається? Знайдіть у Telegram {bot} і надішліть йому число {amount}.",
+  "go_back": "← Інша сума"
  },
  "es": {
   "tagline": "juegos musicales",
@@ -811,7 +826,12 @@
   "support_range": "Introduce una cantidad de {min} a {max}.",
   "support_count": "Ya han apoyado el desarrollo {n} veces. ¡Gracias!",
   "support_hint": "¿Te gusta el juego?",
-  "hero_free": "Todos los juegos son gratis, sin registro ni anuncios."
+  "hero_free": "Todos los juegos son gratis, sin registro ni anuncios.",
+  "go_lead": "El pago se hace en nuestro bot de Telegram: {stars} ⭐. Pulsa Iniciar en el bot y llegará la factura.",
+  "go_app": "Abrir en la app de Telegram",
+  "go_web": "Abrir en Telegram Web (en el navegador)",
+  "go_manual": "¿No se abre? Busca {bot} en Telegram y envíale el número {amount}.",
+  "go_back": "← Otra cantidad"
  },
  "de": {
   "tagline": "Musikspiele",
@@ -1003,7 +1023,12 @@
   "support_range": "Gib einen Betrag von {min} bis {max} ein.",
   "support_count": "Die Entwicklung wurde schon {n}-mal unterstützt. Danke!",
   "support_hint": "Gefällt dir das Spiel?",
-  "hero_free": "Alle Spiele sind kostenlos, ohne Anmeldung und ohne Werbung."
+  "hero_free": "Alle Spiele sind kostenlos, ohne Anmeldung und ohne Werbung.",
+  "go_lead": "Die Zahlung läuft in unserem Telegram-Bot: {stars} ⭐. Tippe im Bot auf Starten, dann kommt die Rechnung.",
+  "go_app": "In der Telegram-App öffnen",
+  "go_web": "In Telegram Web öffnen (im Browser)",
+  "go_manual": "Öffnet sich nicht? Suche {bot} in Telegram und schick ihm die Zahl {amount}.",
+  "go_back": "← Anderer Betrag"
  },
  "fr": {
   "tagline": "jeux musicaux",
@@ -1195,7 +1220,12 @@
   "support_range": "Saisissez un montant de {min} à {max}.",
   "support_count": "Le développement a déjà été soutenu {n} fois. Merci !",
   "support_hint": "Le jeu vous plaît ?",
-  "hero_free": "Tous les jeux sont gratuits, sans inscription ni publicité."
+  "hero_free": "Tous les jeux sont gratuits, sans inscription ni publicité.",
+  "go_lead": "Le paiement se fait dans notre bot Telegram : {stars} ⭐. Appuyez sur Démarrer dans le bot, la facture arrive.",
+  "go_app": "Ouvrir dans l’app Telegram",
+  "go_web": "Ouvrir dans Telegram Web (navigateur)",
+  "go_manual": "Ça ne s’ouvre pas ? Cherchez {bot} dans Telegram et envoyez-lui le nombre {amount}.",
+  "go_back": "← Autre montant"
  },
  "pt": {
   "tagline": "jogos musicais",
@@ -1387,7 +1417,12 @@
   "support_range": "Digite um valor de {min} a {max}.",
   "support_count": "O desenvolvimento já foi apoiado {n} vezes. Obrigado!",
   "support_hint": "Gostou do jogo?",
-  "hero_free": "Todos os jogos são gratuitos, sem registo nem anúncios."
+  "hero_free": "Todos os jogos são gratuitos, sem registo nem anúncios.",
+  "go_lead": "O pagamento é feito no nosso bot do Telegram: {stars} ⭐. Toque em Iniciar no bot e a fatura chega.",
+  "go_app": "Abrir no app do Telegram",
+  "go_web": "Abrir no Telegram Web (no navegador)",
+  "go_manual": "Não abre? Procure {bot} no Telegram e envie o número {amount}.",
+  "go_back": "← Outro valor"
  },
  "tr": {
   "tagline": "müzik oyunları",
@@ -1579,7 +1614,12 @@
   "support_range": "{min} ile {max} arasında bir tutar girin.",
   "support_count": "Geliştirme şimdiden {n} kez desteklendi. Teşekkürler!",
   "support_hint": "Oyunu beğendiniz mi?",
-  "hero_free": "Tüm oyunlar ücretsiz, kayıt ve reklam yok."
+  "hero_free": "Tüm oyunlar ücretsiz, kayıt ve reklam yok.",
+  "go_lead": "Ödeme Telegram botumuzda yapılır: {stars} ⭐. Botta Başlat’a basın, fatura gelir.",
+  "go_app": "Telegram uygulamasında aç",
+  "go_web": "Telegram Web’de aç (tarayıcıda)",
+  "go_manual": "Açılmıyor mu? Telegram’da {bot} botunu bulun ve {amount} sayısını gönderin.",
+  "go_back": "← Başka tutar"
  },
  "zh": {
   "tagline": "音乐游戏",
@@ -1771,6 +1811,11 @@
   "support_range": "请输入 {min} 至 {max} 之间的金额。",
   "support_count": "已有 {n} 次支持，谢谢！",
   "support_hint": "喜欢这款游戏吗？",
-  "hero_free": "所有游戏免费，无需注册，没有广告。"
+  "hero_free": "所有游戏免费，无需注册，没有广告。",
+  "go_lead": "在我们的 Telegram 机器人中支付：{stars} ⭐。在机器人中点击“开始”，就会收到账单。",
+  "go_app": "在 Telegram 应用中打开",
+  "go_web": "在 Telegram Web 中打开（浏览器）",
+  "go_manual": "打不开？在 Telegram 中搜索 {bot}，发送数字 {amount}。",
+  "go_back": "← 换个金额"
  }
 }
