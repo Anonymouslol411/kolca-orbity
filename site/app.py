@@ -90,6 +90,8 @@ SMTP_PORT = int(env('SMTP_PORT') or 587)
 SMTP_USER = env('SMTP_USER') or ''
 SMTP_PASSWORD = env('SMTP_PASSWORD') or ''
 SMTP_FROM = env('SMTP_FROM') or SMTP_USER
+# Подтверждение почты кодом при регистрации: включено, если настроена почта (SMTP); EMAIL_VERIFY=0 — выключить
+EMAIL_VERIFY = bool(SMTP_HOST) and (env('EMAIL_VERIFY') or '1') != '0'
 
 GAMES = ('kolca', 'orbity')
 DOWNLOAD_EXT = {'.exe', '.apk', '.zip'}
@@ -165,6 +167,9 @@ CREATE TABLE IF NOT EXISTS admin_log (
 CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS attempts_key ON attempts(key, ts);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS pending_regs (
+    email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, lang TEXT, code_hash TEXT NOT NULL,
+    expires INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, sent_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS tg_links (
     code TEXT PRIMARY KEY, user_id INTEGER NOT NULL, product TEXT, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS tg_payments (
@@ -398,6 +403,44 @@ def privacy():
     return render_template('legal.html', kind='privacy')
 
 
+CODE_TTL = 15 * 60          # код действует 15 минут
+CODE_RESEND = 60            # новый код — не чаще раза в минуту
+CODE_TRIES = 5              # попыток ввода на один код
+
+
+def code_hash(email, code):
+    return hmac.new(app.secret_key.encode() if isinstance(app.secret_key, str) else app.secret_key,
+                    f'{email}|{code}'.encode(), hashlib.sha256).hexdigest()
+
+
+def create_user(con, email, pw_hash, lang):
+    """Создать аккаунт с пробным периодом. None — почта уже занята."""
+    try:
+        cur = con.execute('INSERT INTO users (email, pw_hash, lang, created_at, trial_end) VALUES (?,?,?,?,?)',
+                          (email, pw_hash, lang, now(), now() + TRIAL_DAYS * 86400))
+        con.commit()
+    except sqlite3.IntegrityError:
+        con.rollback()
+        return None
+    return con.execute('SELECT * FROM users WHERE id=?', (cur.lastrowid,)).fetchone()
+
+
+def send_reg_code(con, email):
+    """Выслать новый код на почту. Возвращает текст ошибки или None."""
+    keys = ('regmail|' + client_ip(), 'regmail|' + email)
+    if too_many(con, keys[0], 10, 3600) or too_many(con, keys[1], 5, 3600):
+        return t('err_too_many')
+    code = f'{secrets.randbelow(10 ** 6):06d}'
+    for k in keys:
+        note_attempt(con, k)
+    if not send_mail(email, t('code_mail_subject', site=SITE_NAME), t('code_mail_body', code=code, site=SITE_NAME)):
+        return t('err_mail_send')
+    con.execute('UPDATE pending_regs SET code_hash=?, expires=?, tries=0, sent_at=? WHERE email=?',
+                (code_hash(email, code), now() + CODE_TTL, now(), email))
+    con.commit()
+    return None
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if g.user:
@@ -416,18 +459,72 @@ def register():
             error = t('err_password_short')
         elif request.form.get('agree') != '1':
             error = t('err_agree')
-        else:
-            try:
-                cur = con.execute('INSERT INTO users (email, pw_hash, lang, created_at, trial_end) VALUES (?,?,?,?,?)',
-                                  (email, generate_password_hash(pw), g.lang, now(), now() + TRIAL_DAYS * 86400))
-                con.commit()
-            except sqlite3.IntegrityError:
+        elif con.execute('SELECT 1 FROM users WHERE email=?', (email,)).fetchone():
+            error = t('err_email_taken')
+        elif not EMAIL_VERIFY:
+            u = create_user(con, email, generate_password_hash(pw), g.lang)
+            if not u:
                 error = t('err_email_taken')
             else:
                 note_attempt(con, 'reg|' + client_ip())
-                start_session(con.execute('SELECT * FROM users WHERE id=?', (cur.lastrowid,)).fetchone())
+                start_session(u)
                 return redirect(url_for('account', welcome=1))
+        else:
+            # аккаунт появится только после ввода кода из письма
+            con.execute('DELETE FROM pending_regs WHERE expires<?', (now() - 86400,))
+            old = con.execute('SELECT * FROM pending_regs WHERE email=?', (email,)).fetchone()
+            con.execute('INSERT OR REPLACE INTO pending_regs (email, pw_hash, lang, code_hash, expires, tries, sent_at) '
+                        'VALUES (?,?,?,?,?,?,?)', (email, generate_password_hash(pw), g.lang,
+                                                   old['code_hash'] if old else '-', old['expires'] if old else 0,
+                                                   old['tries'] if old else CODE_TRIES, old['sent_at'] if old else 0))
+            con.commit()
+            fresh = old and old['sent_at'] > now() - CODE_RESEND and old['expires'] > now()
+            error = None if fresh else send_reg_code(con, email)
+            if not error:
+                session['reg_email'] = email
+                return redirect(url_for('verify'))
     return render_template('auth.html', mode='register', error=error, email=email)
+
+
+@app.route('/verify', methods=['GET', 'POST'])
+def verify():
+    if g.user:
+        return redirect(url_for('account'))
+    email = session.get('reg_email') or ''
+    con = db()
+    row = con.execute('SELECT * FROM pending_regs WHERE email=?', (email,)).fetchone() if email else None
+    if not row:
+        return redirect(url_for('register'))
+    error, notice = None, None
+    if request.method == 'POST':
+        check_csrf()
+        if request.form.get('action') == 'resend':
+            if row['sent_at'] > now() - CODE_RESEND:
+                error = t('verify_wait')
+            else:
+                error = send_reg_code(con, email)
+                notice = None if error else t('verify_resent')
+        else:
+            code = re.sub(r'\D', '', request.form.get('code') or '')
+            if row['tries'] >= CODE_TRIES:
+                error = t('err_code_tries')
+            elif row['expires'] < now():
+                error = t('err_code_expired')
+            else:
+                con.execute('UPDATE pending_regs SET tries=tries+1 WHERE email=?', (email,))
+                con.commit()
+                if len(code) == 6 and hmac.compare_digest(code_hash(email, code), row['code_hash']):
+                    con.execute('DELETE FROM pending_regs WHERE email=?', (email,))
+                    con.commit()
+                    session.pop('reg_email', None)
+                    u = create_user(con, email, row['pw_hash'], row['lang'] or g.lang)
+                    if not u:
+                        return render_template('auth.html', mode='register', error=t('err_email_taken'), email=email)
+                    note_attempt(con, 'reg|' + client_ip())
+                    start_session(u)
+                    return redirect(url_for('account', welcome=1))
+                error = t('err_code') if row['tries'] + 1 < CODE_TRIES else t('err_code_tries')
+    return render_template('auth.html', mode='verify', error=error, notice=notice, email=email)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1264,6 +1361,13 @@ if __name__ == '__main__':
         cli_yoomoney_auth()
     elif cmd == 'yoomoney-check':
         cli_yoomoney_check()
+    elif cmd == 'mail-test' and len(sys.argv) > 2:
+        if not SMTP_HOST:
+            sys.exit('Почта не настроена: sudo bash manage.sh mail')
+        with app.test_request_context():
+            ok = send_mail(sys.argv[2], f'{SITE_NAME}: проверка почты', 'Если вы читаете это письмо — почта сайта настроена правильно.')
+        print('Письмо отправлено — проверьте ящик (и «Спам»).' if ok else 'Не удалось отправить — ошибка выше.')
+        sys.exit(0 if ok else 1)
     elif cmd == 'add-file' and len(sys.argv) > 2:
         cli_add_file(sys.argv[2])
     elif cmd == 'dev':

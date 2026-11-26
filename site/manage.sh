@@ -8,6 +8,8 @@
 #   yoomoney-auth    подключить API ЮMoney (сервер сам проверяет оплаты)
 #   yoomoney-check   проверить связь с ЮMoney и неоплаченные заказы
 #   telegram         подключить платёжного Telegram-бота (оплата звёздами)
+#   mail             настроить почту (код подтверждения при регистрации, сброс пароля)
+#   mail-test АДРЕС  отправить пробное письмо
 #   add-file ФАЙЛ    добавить exe/apk в раздачу для покупателей «Навсегда»
 #   files            список файлов в раздаче
 #   stats            сколько пользователей и оплат
@@ -137,7 +139,30 @@ configure() {
     ask "Банк" "$(env_get CARD_BANK)"; env_set CARD_BANK "$REPLY"
   fi
   telegram_questions
+  mail_questions
   chmod 600 .env
+}
+
+mail_questions() {
+  echo; echo "${BOLD}Почта сайта${NC} — с неё приходят код подтверждения при регистрации и ссылка смены пароля."
+  echo "  Нужен «пароль приложения» (не обычный пароль от ящика):"
+  echo "   Яндекс: id.yandex.ru → Безопасность → Пароли приложений → Почта"
+  echo "   Mail.ru: Настройки → Безопасность → Пароли для внешних приложений"
+  echo "   Gmail:   myaccount.google.com → Безопасность → Пароли приложений (нужна двухэтапная проверка)"
+  echo "  1) Яндекс  2) Mail.ru  3) Gmail  4) другой сервер  Enter — пропустить (регистрация без кода)"
+  read -r -p "Выбор: " REPLY || true
+  case "$REPLY" in
+    1) env_set SMTP_HOST smtp.yandex.ru; env_set SMTP_PORT 465 ;;
+    2) env_set SMTP_HOST smtp.mail.ru;   env_set SMTP_PORT 465 ;;
+    3) env_set SMTP_HOST smtp.gmail.com; env_set SMTP_PORT 465 ;;
+    4) ask "SMTP-сервер" "$(env_get SMTP_HOST)"; env_set SMTP_HOST "$REPLY"
+       ask "Порт (465 — SSL, 587 — STARTTLS)" "$(env_get SMTP_PORT)"; env_set SMTP_PORT "${REPLY//[^0-9]/}" ;;
+    *) return 0 ;;
+  esac
+  ask "Адрес ящика (логин)" "$(env_get SMTP_USER)"; env_set SMTP_USER "$REPLY"; env_set SMTP_FROM "$REPLY"
+  ask_secret SMTP_PASSWORD "Пароль приложения"
+  env_set EMAIL_VERIFY 1
+  return 0
 }
 
 telegram_questions() {
@@ -271,6 +296,18 @@ case "$cmd" in
     say "Готово. Откройте бота в Telegram и нажмите «Старт»; на сайте в «Аккаунте» появится «Привязать Telegram»."
     ;;
   bot-logs) need_root "$cmd"; dc logs --tail=200 -f bot ;;
+  mail)
+    need_root "$cmd"
+    [ -f .env ] || die "сначала установите сайт: sudo bash manage.sh install"
+    mail_questions; chmod 600 .env
+    dc up -d --force-recreate
+    sleep 3
+    ask "Куда отправить пробное письмо (Enter — пропустить)"
+    [ -n "$REPLY" ] && dc exec -T web python app.py mail-test "$REPLY"
+    say "Готово. Теперь при регистрации на почту приходит код подтверждения."
+    ;;
+  mail-test) need_root "$cmd"; [ -n "${2:-}" ] || die "укажите адрес: sudo bash manage.sh mail-test you@mail.ru"
+    dc exec -T web python app.py mail-test "$2" ;;
   add-file)
     need_root "$cmd"; f="${2:-}"; [ -f "$f" ] || die "укажите путь к файлу: sudo bash manage.sh add-file Kolca.exe"
     name="$(basename "$f")"
@@ -300,6 +337,6 @@ case "$cmd" in
     say "Копия базы: $f"
     ;;
   *)
-    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 esac
