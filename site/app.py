@@ -418,7 +418,7 @@ def inject():
                 trial_days=TRIAL_DAYS, site_name=SITE_NAME, support_email=SUPPORT_EMAIL, games=GAMES,
                 products=PRODUCTS, methods=methods_available(), fmt_rub=fmt_rub, fmt_date=fmt_date,
                 can_play=can_play, can_download=can_download, now=now(),
-                tg_bot=tg_bot_username(), ptitle=product_title, registration_open=REGISTRATION_OPEN)
+                tg_bot=tg_bot_username(), ptitle=product_title, registration_open=REGISTRATION_OPEN, dl_label=download_label)
 
 
 def check_csrf():
@@ -1447,8 +1447,6 @@ def games():
             status = request.form.get('status') if request.form.get('status') in ('soon', 'live', 'paid') else 'soon'
             price = parse_amount(request.form.get('price')) if status == 'paid' else None
             gfile = secure_filename(request.form.get('file') or '') or None
-            if status == 'paid' and not price:
-                return redirect(url_for('admin.games', msg='bad_price', edit=gid or ''))
             if gfile and not (DOWNLOADS_DIR / gfile).is_file():
                 gfile = None
             url = (request.form.get('url') or '').strip()[:300]
@@ -1694,6 +1692,38 @@ def cli_github_game(repo, price=None, title=None):
           f'скриншотов: {len(shots)}{", есть обложка" if cover else ""}. Страница: {BASE_URL}/games/{gid}')
 
 
+def cli_github_files(repo):
+    """Скачать exe/apk/zip из последнего релиза открытого репозитория в раздел «Скачать»."""
+    if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
+        sys.exit('Укажите репозиторий как владелец/имя, например Anonymouslol411/kolca-orbity')
+    try:
+        rel = json.loads(gh_get(f'https://api.github.com/repos/{repo}/releases/latest'))
+    except urllib.error.HTTPError as e:
+        sys.exit(f'GitHub ответил {e.code}: релиз не найден')
+    except (urllib.error.URLError, TimeoutError) as e:
+        sys.exit(f'Нет связи с GitHub: {e}')
+    assets = [a for a in rel.get('assets', []) if Path(a['name']).suffix.lower() in DOWNLOAD_EXT]
+    if not assets:
+        sys.exit('В последнем релизе нет файлов .exe / .apk / .zip')
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    for a in assets:
+        name = secure_filename(a['name'])
+        print(f'Скачиваю {name} ({a["size"] / 1048576:.1f} МБ)…')
+        data = gh_get(a['browser_download_url'], limit=a['size'] + 1024, accept='application/octet-stream')
+        tmp = DOWNLOADS_DIR / (name + '.part')
+        tmp.write_bytes(data)
+        tmp.replace(DOWNLOADS_DIR / name)
+    print('Готово. Файлы в разделе «Скачать»:', ', '.join(secure_filename(a['name']) for a in assets))
+
+
+def download_label(name):
+    """Понятная подпись файла: Kolca.exe → «Кольца — Windows»."""
+    stem, ext = Path(name).stem.lower(), Path(name).suffix.lower()
+    game = next((t('game_' + g) for g in GAMES if g in stem), None)
+    plat = {'.exe': 'Windows', '.apk': 'Android'}.get(ext)
+    return f'{game} — {plat}' if game and plat else name
+
+
 def cli_add_file(path):
     src = Path(path)
     if not src.is_file() or src.suffix.lower() not in DOWNLOAD_EXT:
@@ -1728,6 +1758,9 @@ if __name__ == '__main__':
         title = next((a for a in args[1:] if a != price), None)
         with app.test_request_context():
             cli_github_game(args[0], price, title)
+    elif cmd == 'github-files' and len(sys.argv) > 2:
+        with app.test_request_context():
+            cli_github_files(sys.argv[2])
     elif cmd == 'add-file' and len(sys.argv) > 2:
         cli_add_file(sys.argv[2])
     elif cmd == 'dev':

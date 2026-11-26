@@ -10,6 +10,7 @@
 #   mail-test АДРЕС  отправить пробное письмо
 #   add-file ФАЙЛ    добавить exe/apk в раздачу для покупателей «Навсегда»
 #   github-game РЕПО [ЦЕНА] [НАЗВАНИЕ]  добавить игру из GitHub (описание, скриншоты, файл релиза)
+#   github-files РЕПО  скачать exe/apk из последнего релиза GitHub в раздел «Скачать»
 #   files            список файлов в раздаче
 #   stats            сколько пользователей и оплат
 #   config           заново пройти настройку (домен, цены, бот, почта) и перезапустить
@@ -286,6 +287,9 @@ case "$cmd" in
   github-game)
     need_root "$cmd"; [ -n "${2:-}" ] || die "пример: sudo bash manage.sh github-game Anonymouslol411/otklik"
     dc exec -T web python app.py github-game "${@:2}" ;;
+  github-files)
+    need_root "$cmd"; [ -n "${2:-}" ] || die "пример: sudo bash manage.sh github-files Anonymouslol411/kolca-orbity"
+    dc exec -T web python app.py github-files "$2" ;;
   files)   need_root "$cmd"; dc exec -T web ls -lh /data/downloads 2>/dev/null || echo "Файлов пока нет" ;;
   stats)   need_root "$cmd"; dc exec -T web python app.py stats ;;
   config)  need_root "$cmd"; configure; dc up -d --force-recreate; say "Настройки применены" ;;
@@ -308,6 +312,6 @@ case "$cmd" in
     say "Копия базы: $f"
     ;;
   *)
-    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,/^set -euo/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'
     ;;
 esac
