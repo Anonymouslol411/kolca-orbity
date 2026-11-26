@@ -203,3 +203,5 @@ form input[type=text] { display: block; width: 100%; margin-top: 6px; padding: 1
 .oauth-code { font-size: 14px; letter-spacing: 0; word-break: break-all; display: block; }
 .inline-check { display: inline; margin: 0; }
 .inline-check .link-btn { padding: 0 0 0 6px; }
+
+.code-input{font-size:1.6rem;letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums}
