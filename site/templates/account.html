@@ -13,67 +13,17 @@
 
   <div class="card">
     <p class="muted">{{ user.email }}</p>
-    <p class="big-status">{% if user.lifetime %}{{ t('status_forever') }}
-    {% elif (user.paid_until or 0) > now %}{{ t('status_until', date=fmt_date(user.paid_until)) }}
-    {% elif (user.trial_end or 0) > now %}{{ t('status_trial', date=fmt_date(user.trial_end, True)) }}
-    {% else %}{{ t('status_none') }}{% endif %}</p>
-
-    {% if can_play(user) %}
-      <div class="cta-row left">
-        {% for g in games %}<a class="btn" href="{{ url_for('play', game=g) }}">{{ t('play_btn') }}: {{ t('game_' + g) }}</a>{% endfor %}
-        {% if can_download(user) %}<a class="btn ghost" href="{{ url_for('downloads') }}">{{ t('nav_downloads') }}</a>{% endif %}
-      </div>
-    {% endif %}
-    {% if not user.lifetime %}
-      <a class="btn {% if can_play(user) %}ghost{% else %}big{% endif %}" href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a>
-    {% endif %}
+    <div class="cta-row left">
+      {% for g in games %}<a class="btn" href="{{ url_for('play', game=g) }}">{{ t('play_btn') }}: {{ t('game_' + g) }}</a>{% endfor %}
+      <a class="btn ghost" href="{{ url_for('downloads') }}">{{ t('nav_downloads') }}</a>
+    </div>
   </div>
 
   <div class="card">
-    <h3>{{ t('balance') }}: {{ fmt_rub(user.balance) }}</h3>
-    <p class="muted">{{ t('balance_note') }}</p>
-    {% if tg_bot and user.tg_id %}<a class="btn small" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_topup') }}</a>
-    {% elif tg_bot %}<form method="post" action="{{ url_for('account_telegram') }}"><input type="hidden" name="csrf" value="{{ csrf }}">
-      <button class="btn small" type="submit">{{ t('tg_topup') }}</button></form>{% endif %}
+    <h3>{{ t('support_title') }}</h3>
+    <p class="muted">{{ t('support_text') }}</p>
+    <a class="btn small" href="{{ url_for('support') }}">{{ t('support_btn') }}</a>
   </div>
-
-  {% if tg_bot %}
-  <div class="card">
-    <h3>Telegram</h3>
-    {% if user.tg_id %}
-      <p>{{ t('tg_linked') }}</p>
-      <div class="cta-row left">
-        <a class="btn" href="https://t.me/{{ tg_bot }}" rel="noopener">{{ t('tg_open') }}</a>
-        <form method="post" action="{{ url_for('account_telegram') }}" class="inline-form">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="unlink">
-          <button class="link-btn" type="submit">{{ t('tg_unlink') }}</button>
-        </form>
-      </div>
-    {% else %}
-      <p class="muted">{{ t('tg_text') }}</p>
-      <form method="post" action="{{ url_for('account_telegram') }}">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="btn" type="submit">{{ t('tg_link') }}</button>
-      </form>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {% if orders %}
-  <div class="card">
-    <h3>{{ t('orders_title') }}</h3>
-    {% for o in orders %}
-      <div class="log-row"><span>{{ fmt_date(o.created_at, True) }}</span><b>{{ fmt_rub(o.amount) }}</b>
-        <span class="muted">{{ ptitle(o.product) }} · {{ t('order_' + o.status) }}
-        {% if o.status == 'pending' %}
-          <form method="post" action="{{ url_for('pay_check', oid=o.id) }}" class="inline-check">
-            <input type="hidden" name="csrf" value="{{ csrf }}">
-            <button class="link-btn" type="submit">{{ t('btn_check_payment') }}</button>
-          </form>
-        {% endif %}</span></div>
-    {% endfor %}
-  </div>
-  {% endif %}
 
   <details class="card">
     <summary>{{ t('change_password') }}</summary>

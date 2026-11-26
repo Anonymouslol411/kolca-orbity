@@ -6,14 +6,10 @@
     <h1>{{ t('hero_title') }}</h1>
     <p class="lead">{{ t('hero_sub') }}</p>
     <div class="cta-row">
-      {% if user %}
-        <a class="btn big" href="{{ url_for('account') }}">{{ t('cta_play') }}</a>
-      {% else %}
-        <a class="btn big" href="{{ url_for('register') }}">{{ t('cta_trial', days=trial_days) }}</a>
-      {% endif %}
-      <a class="btn ghost big" href="{{ url_for('games_page') }}">{{ t('games_all') }}</a>
+      <a class="btn big" href="{{ url_for('games_page') }}">{{ t('cta_play') }}</a>
+      <a class="btn ghost big" href="{{ url_for('support') }}">{{ t('nav_support') }}</a>
     </div>
-    <p class="hero-price">{{ t('hero_price', days=trial_days, month=fmt_rub(products.month.price) if products.month else '', forever=fmt_rub(products.forever.price) if products.forever else '') }}</p>
+    <p class="hero-price">{{ t('hero_free') }}</p>
   </div>
   <div class="dial" aria-hidden="true"><canvas id="hero-canvas"></canvas></div>
 </section>
@@ -49,9 +45,14 @@
   </div>
 </section>
 
-<section class="section" id="pricing">
-  <div class="section-head"><h2>{{ t('pricing_title') }}</h2></div>
-  {% include '_plans.html' %}
+<section class="section" id="support">
+  <div class="support-teaser">
+    <div>
+      <h2>{{ t('support_title') }}</h2>
+      <p class="lead">{{ t('support_text') }}</p>
+    </div>
+    <a class="btn big" href="{{ url_for('support') }}">{{ t('support_btn') }}</a>
+  </div>
 </section>
 
 <section class="section">
@@ -60,7 +61,7 @@
     {% for i in range(1, 6) %}
     <details>
       <summary>{{ t('q%d' % i) }}</summary>
-      <p>{{ t('a%d' % i, days=trial_days, month=fmt_rub(products.month.price) if products.month else '—', forever=fmt_rub(products.forever.price) if products.forever else '—') }}</p>
+      <p>{{ t('a%d' % i) }}</p>
     </details>
     {% endfor %}
   </div>

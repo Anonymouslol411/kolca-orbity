@@ -5,13 +5,7 @@
   {% else %}<div class="disc disc-orbity" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>{% endif %}
   <h3>{{ t('game_' + code) }}</h3>
   <p>{{ t('game_' + code + '_desc') }}</p>
-  {% if user and can_play(user) %}
-    <a class="btn small" href="{{ url_for('play', game=code) }}">{{ t('play_btn') }}</a>
-  {% elif user %}
-    <a class="btn small" href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a>
-  {% else %}
-    <a class="btn small" href="{{ url_for('register') }}">{{ t('play_btn') }}</a>
-  {% endif %}
+  <a class="btn small" href="{{ url_for('play', game=code) }}">{{ t('play_btn') }}</a>
 </article>
 {% endmacro %}
 
@@ -23,8 +17,8 @@
   <p>{{ g.description }}</p>
   {% if g.status == 'soon' %}
     <span class="pill">{{ t('games_soon') }}</span>
-  {% elif g.status == 'paid' %}
-    <a class="btn small" href="{{ url_for('game_page', gid=g.id) }}">{{ fmt_rub(g.price) }}</a>
+  {% elif g.file %}
+    <a class="btn small" href="{{ url_for('download_file', name=g.file) }}">{{ t('games_free_dl') }}</a>
   {% elif g.url %}
     {% set is_file = g.url.lower().endswith(('.exe', '.zip', '.apk')) %}
     <a class="btn small ghost" href="{{ g.url if is_file else url_for('game_page', gid=g.id) }}" rel="noopener noreferrer">{{ t('games_free_dl') if is_file else t('games_open') }}</a>

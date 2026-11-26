@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('support_title') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <h1>{{ t('support_title') }}</h1>
+  <p class="lead">{{ t('support_text') }}</p>
+  {% if error %}<div class="note warn">{{ error }}</div>{% endif %}
+  {% if bot %}
+  <form class="card support-form" method="get" action="{{ url_for('support') }}">
+    <div class="amount-presets" role="group" aria-label="{{ t('support_amount') }}">
+      {% for p in presets %}<button class="chip" type="submit" name="amount" value="{{ p }}">{{ fmt_rub(p) }}</button>{% endfor %}
+    </div>
+    <label>{{ t('support_amount') }}
+      <span class="amount-row"><input type="text" name="amount" inputmode="numeric" pattern="[0-9 ]*" maxlength="8"
+        placeholder="250" value="{{ value }}" aria-describedby="amount-note"><span class="cur">₽</span></span></label>
+    <button class="btn big wide" type="submit">{{ t('support_btn') }}</button>
+    <p class="fine" id="amount-note">{{ t('support_note', min=fmt_rub(min_rub), max=fmt_rub(max_rub), rate=fmt_rub(star_rub)) }}</p>
+  </form>
+  {% else %}
+    <div class="note">{{ t('support_unavailable') }}</div>
+  {% endif %}
+  {% if donors %}<p class="muted">{{ t('support_count', n=donors) }}</p>{% endif %}
+</section>
+{% endblock %}

@@ -7,15 +7,14 @@
   {% include '_admin_nav.html' %}
   {% if request.args.get('msg') == 'deleted' %}<div class="note ok">Удалено аккаунтов: {{ request.args.get('n') or 1 }}.</div>{% endif %}
   {% if request.args.get('msg') == 'need_confirm' %}<div class="note warn">Удаление не выполнено: подтвердите его в появившемся окне (нужен включённый JavaScript) или удалите аккаунт со страницы пользователя.</div>{% endif %}
-  {% if not stats.tg %}<div class="note warn">Telegram-бот не подключён — пополнить баланс сейчас нельзя, а значит и купить подписку. В терминале: <code>sudo bash manage.sh telegram</code></div>{% endif %}
+  {% if not stats.tg %}<div class="note warn">Telegram-бот не подключён — кнопка «Поддержать» на сайте не работает. В терминале: <code>sudo bash manage.sh telegram</code></div>{% endif %}
   {% if stats.review %}<div class="note warn"><a href="{{ url_for('admin.orders') }}">Переводов на карту ждут проверки: {{ stats.review }}</a></div>{% endif %}
 
   <div class="stats">
-    <div class="stat"><b>{{ stats.users }}</b><span>пользователей</span></div>
-    <div class="stat"><b>{{ stats.forever }}</b><span>купили «Навсегда»</span></div>
-    <div class="stat"><b>{{ stats.month }}</b><span>с оплаченным месяцем</span></div>
-    <div class="stat"><b>{{ fmt_rub(stats.revenue_month) }}</b><span>оплат за 30 дней</span></div>
-    <div class="stat"><b>{{ fmt_rub(stats.revenue_total) }}</b><span>оплат всего</span></div>
+    <div class="stat"><b>{{ stats.users }}</b><span>аккаунтов</span></div>
+    <div class="stat"><b>{{ stats.donations }}</b><span>донатов</span></div>
+    <div class="stat"><b>{{ fmt_rub(stats.donated_30) }}</b><span>донатов за 30 дней</span></div>
+    <div class="stat"><b>{{ fmt_rub(stats.donated) }}</b><span>донатов всего ({{ stats.donated_stars }} ⭐)</span></div>
   </div>
 
   <form class="admin-search" method="get">
