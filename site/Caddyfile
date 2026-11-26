@@ -1,0 +1,30 @@
+# Caddy сам получает и продлевает HTTPS-сертификат для домена из .env (DOMAIN).
+# Если домена пока нет, в .env стоит DOMAIN=:80 — сайт откроется по IP без HTTPS.
+{
+	servers {
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+{$DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 300MB
+	}
+	reverse_proxy web:8000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-Via
+	}
+	# служебные файлы не отдаём
+	@hidden path /.env* /.git* /*.db /*.sqlite
+	respond @hidden 404
+}

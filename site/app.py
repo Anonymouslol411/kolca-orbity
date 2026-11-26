@@ -1,0 +1,1212 @@
+"""Сайт игр «Кольца» и «Орбиты».
+
+Тарифы (разовые покупки, без автосписаний):
+  * пробный период — 3 дня игры онлайн сразу после регистрации, без карты;
+  * «Месяц онлайн»  — PRICE_MONTH ₽ (329), 30 дней игры в браузере;
+  * «Навсегда»      — PRICE_FOREVER ₽ (5000), игра онлайн без срока + скачивание exe/apk.
+
+Оплата: ЮMoney (кошелёк физлица, форма Quickpay; факт оплаты сервер проверяет сам через API ЮMoney),
+перевод на карту (подтверждает администратор), баланс аккаунта.
+
+Админка: один администратор, вход по паролю на секретном адресе /<ADMIN_PATH>.
+
+Команды:  gunicorn app:app                 — сайт
+          python app.py admin-password     — задать пароль администратора
+          python app.py stats              — сводка
+          python app.py add-file ПУТЬ      — положить exe/apk в раздачу
+          python app.py worker             — фоновая проверка оплат ЮMoney через API
+          python app.py yoomoney-auth      — подключить API ЮMoney (получить токен)
+          python app.py yoomoney-check     — проверить связь с ЮMoney и неоплаченные заказы
+"""
+import getpass
+import hashlib
+import hmac
+import json
+import logging
+import os
+import re
+import secrets
+import shutil
+import smtplib
+import sqlite3
+import sys
+import time
+import ssl
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime
+from email.message import EmailMessage
+from functools import wraps
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from flask import (Blueprint, Flask, abort, g, jsonify, redirect, render_template, request,
+                   send_from_directory, session, url_for)
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+
+# ---------------------------------------------------------------- настройки
+HERE = Path(__file__).resolve().parent
+env = os.environ.get
+
+SECRET_KEY = env('SECRET_KEY') or ''
+BASE_URL = (env('BASE_URL') or 'http://localhost:8000').rstrip('/')
+DATA_DIR = Path(env('DATA_DIR') or HERE / 'data')
+DOWNLOADS_DIR = DATA_DIR / 'downloads'
+GAMES_DIR = Path(env('GAMES_DIR') or HERE.parent / 'web')
+SITE_NAME = env('SITE_NAME') or 'Kolca & Orbity'
+SUPPORT_EMAIL = env('SUPPORT_EMAIL') or ''
+TZ = ZoneInfo(env('TIMEZONE') or 'Europe/Moscow')
+TRIAL_DAYS = int(env('TRIAL_DAYS') or 3)
+ADMIN_PATH = (env('ADMIN_PATH') or '').strip('/')
+
+PRODUCTS = {
+    'month': {'price': int(env('PRICE_MONTH') or 329), 'days': 30},
+    'forever': {'price': int(env('PRICE_FOREVER') or 5000), 'days': None},
+}
+PRODUCTS = {k: v for k, v in PRODUCTS.items() if v['price'] > 0}
+
+YOOMONEY_WALLET = re.sub(r'\D', '', env('YOOMONEY_WALLET') or '')
+YOOMONEY_SECRET = env('YOOMONEY_SECRET') or ''            # секрет HTTP-уведомлений (необязательно, ускоряет проверку)
+YOOMONEY_CLIENT_ID = env('YOOMONEY_CLIENT_ID') or ''      # приложение ЮMoney для доступа к истории операций
+YOOMONEY_CLIENT_SECRET = env('YOOMONEY_CLIENT_SECRET') or ''
+YOOMONEY_REDIRECT_URI = env('YOOMONEY_REDIRECT_URI') or ''   # по умолчанию BASE_URL/yoomoney/oauth
+YOOMONEY_API = env('YOOMONEY_API_BASE') or 'https://yoomoney.ru'
+YOOMONEY_MIN_SHARE = float(env('YOOMONEY_MIN_SHARE') or 0.95)   # какая доля цены должна дойти до кошелька (комиссия ЮMoney)
+CARD_NUMBER = re.sub(r'\D', '', env('CARD_NUMBER') or '')
+CARD_HOLDER = env('CARD_HOLDER') or ''
+CARD_BANK = env('CARD_BANK') or ''
+
+SMTP_HOST = env('SMTP_HOST') or ''
+SMTP_PORT = int(env('SMTP_PORT') or 587)
+SMTP_USER = env('SMTP_USER') or ''
+SMTP_PASSWORD = env('SMTP_PASSWORD') or ''
+SMTP_FROM = env('SMTP_FROM') or SMTP_USER
+
+GAMES = ('kolca', 'orbity')
+DOWNLOAD_EXT = {'.exe', '.apk', '.zip'}
+SMALL_REQUEST = 64 * 1024            # обычные формы
+UPLOAD_LIMIT = 300 * 1024 * 1024     # загрузка файлов в админке
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+log = logging.getLogger('site')
+
+I18N = json.loads((HERE / 'i18n.json').read_text(encoding='utf-8'))
+LANGS = list(I18N['_languages'].keys())
+
+
+def yoomoney_token(con=None):
+    con = con or db()
+    return setting(con, 'yoomoney_token') or ''
+
+
+def methods_available():
+    m = []
+    if YOOMONEY_WALLET and yoomoney_token():      # оплату ЮMoney проверяет сервер через API — без токена способ выключен
+        m += ['yoomoney_card', 'yoomoney_wallet']
+    if CARD_NUMBER:
+        m.append('card')
+    return m
+
+
+# ---------------------------------------------------------------- база данных
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    pw_hash TEXT NOT NULL,
+    lang TEXT,
+    created_at INTEGER NOT NULL,
+    trial_end INTEGER,
+    paid_until INTEGER,
+    lifetime INTEGER NOT NULL DEFAULT 0,
+    balance REAL NOT NULL DEFAULT 0,
+    banned INTEGER NOT NULL DEFAULT 0,
+    ban_reason TEXT,
+    session_ver INTEGER NOT NULL DEFAULT 0,
+    reset_token TEXT,
+    reset_expires INTEGER
+);
+CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER,
+    product TEXT NOT NULL,
+    amount REAL NOT NULL,
+    method TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payer_note TEXT,
+    operation_id TEXT UNIQUE,
+    created_at INTEGER NOT NULL,
+    paid_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS balance_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, delta REAL NOT NULL, reason TEXT, created_at INTEGER);
+CREATE TABLE IF NOT EXISTS admin_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, target_email TEXT, details TEXT, ip TEXT, created_at INTEGER);
+CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, ts INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS attempts_key ON attempts(key, ts);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+"""
+
+
+def db_connect():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(DATA_DIR / 'site.db', timeout=30)
+    con.row_factory = sqlite3.Row
+    con.execute('PRAGMA journal_mode=WAL')
+    con.executescript(SCHEMA)
+    return con
+
+
+def db():
+    if 'db' not in g:
+        g.db = db_connect()
+    return g.db
+
+
+def now():
+    return int(time.time())
+
+
+def setting(con, key, default=None):
+    row = con.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
+    return row['value'] if row else default
+
+
+def set_setting(con, key, value):
+    con.execute('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, value))
+    con.commit()
+
+
+# --- доступ
+def can_play(u):
+    return bool(u) and not u['banned'] and (u['lifetime'] or (u['paid_until'] or 0) > now() or (u['trial_end'] or 0) > now())
+
+
+def can_download(u):
+    return bool(u) and not u['banned'] and bool(u['lifetime'])
+
+
+def grant(con, user_id, product=None, days=None):
+    """Выдать доступ: товар ('month' / 'forever') или N дней."""
+    u = con.execute('SELECT * FROM users WHERE id=?', (user_id,)).fetchone()
+    if product == 'forever':
+        con.execute('UPDATE users SET lifetime=1 WHERE id=?', (user_id,))
+    else:
+        days = days if days is not None else PRODUCTS['month']['days']
+        start = max(now(), u['paid_until'] or 0)
+        con.execute('UPDATE users SET paid_until=? WHERE id=?', (start + days * 86400, user_id))
+    con.commit()
+
+
+def change_balance(con, user_id, delta, reason):
+    con.execute('UPDATE users SET balance=ROUND(balance+?, 2) WHERE id=?', (delta, user_id))
+    con.execute('INSERT INTO balance_log (user_id, delta, reason, created_at) VALUES (?,?,?,?)', (user_id, delta, reason, now()))
+    con.commit()
+
+
+# --- ограничение числа попыток (общее для всех процессов сайта)
+def too_many(con, key, limit, window):
+    con.execute('DELETE FROM attempts WHERE ts<?', (now() - 86400,))
+    n = con.execute('SELECT COUNT(*) FROM attempts WHERE key=? AND ts>?', (key, now() - window)).fetchone()[0]
+    return n >= limit
+
+
+def note_attempt(con, key):
+    con.execute('INSERT INTO attempts (key, ts) VALUES (?,?)', (key, now()))
+    con.commit()
+
+
+def fmt_rub(v):
+    v = float(v or 0)
+    text = f'{v:,.2f}'.replace(',', ' ').replace('.', ',')
+    return (text[:-3] if text.endswith(',00') else text) + ' ₽'
+
+
+def fmt_date(ts, with_time=False):
+    if not ts:
+        return '—'
+    return datetime.fromtimestamp(ts, TZ).strftime('%d.%m.%Y %H:%M' if with_time else '%d.%m.%Y')
+
+
+def fmt_card(num):
+    return ' '.join(num[i:i + 4] for i in range(0, len(num), 4))
+
+
+# ---------------------------------------------------------------- приложение
+app = Flask(__name__, template_folder=str(HERE / 'templates'), static_folder=str(HERE / 'static'))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.config.update(
+    SECRET_KEY=SECRET_KEY or secrets.token_hex(32),
+    SESSION_COOKIE_NAME='s',
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=BASE_URL.startswith('https://'),
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
+    MAX_CONTENT_LENGTH=UPLOAD_LIMIT,
+)
+if not SECRET_KEY:
+    log.warning('SECRET_KEY не задан — сессии сбросятся при перезапуске. Запустите manage.sh install.')
+
+
+@app.teardown_appcontext
+def close_db(exc):
+    con = g.pop('db', None)
+    if con is not None:
+        con.close()
+
+
+def pick_lang():
+    lang = request.args.get('lang')
+    if lang in LANGS:
+        session['lang'] = lang
+        return lang
+    return session.get('lang') if session.get('lang') in LANGS else 'ru'
+
+
+@app.before_request
+def setup_request():
+    g.lang = pick_lang()
+    g.user = None
+    # большие запросы разрешены только для загрузки файлов в админке
+    if (request.content_length or 0) > SMALL_REQUEST and request.endpoint != 'admin.downloads':
+        abort(413)
+    uid = session.get('uid')
+    if uid:
+        u = db().execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+        if u and not u['banned'] and session.get('sv') == u['session_ver']:
+            g.user = u
+        else:
+            for k in ('uid', 'sv'):
+                session.pop(k, None)
+            if u and u['banned'] and request.endpoint not in ('login', 'static'):
+                return redirect(url_for('login', banned=1))
+    if 'csrf' not in session:
+        session['csrf'] = secrets.token_urlsafe(24)
+
+
+CSP = ("default-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; "
+       "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' data: blob:; "
+       "font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'; "
+       "form-action 'self' https://yoomoney.ru")
+
+
+@app.after_request
+def security_headers(resp):
+    h = resp.headers
+    h.setdefault('Content-Security-Policy', CSP)
+    h.setdefault('X-Content-Type-Options', 'nosniff')
+    h.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    h.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    h.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+    h.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+    if request.blueprint == 'admin' or request.endpoint in ('account', 'pay', 'login', 'register'):
+        h['Cache-Control'] = 'no-store'
+    return resp
+
+
+def t(key, **kw):
+    s = I18N.get(g.get('lang', 'ru'), {}).get(key) or I18N['ru'].get(key) or key
+    return s.format(**kw) if kw else s
+
+
+@app.context_processor
+def inject():
+    return dict(t=t, lang=g.get('lang', 'ru'), langs=I18N['_languages'], user=g.get('user'), csrf=session.get('csrf'),
+                trial_days=TRIAL_DAYS, site_name=SITE_NAME, support_email=SUPPORT_EMAIL, games=GAMES,
+                products=PRODUCTS, methods=methods_available(), fmt_rub=fmt_rub, fmt_date=fmt_date,
+                can_play=can_play, can_download=can_download, now=now())
+
+
+def check_csrf():
+    sent = request.form.get('csrf') or ''
+    if not sent or not hmac.compare_digest(sent, session.get('csrf') or ''):
+        abort(400)
+
+
+def login_required(f):
+    @wraps(f)
+    def wrapper(*a, **kw):
+        if not g.user:
+            return redirect(url_for('login', next=request.path))
+        return f(*a, **kw)
+    return wrapper
+
+
+def client_ip():
+    return request.remote_addr or '-'
+
+
+def start_session(u):
+    lang = g.lang
+    session.clear()
+    session.update(uid=u['id'], sv=u['session_ver'], lang=lang, csrf=secrets.token_urlsafe(24))
+    session.permanent = True
+
+
+# ---------------------------------------------------------------- страницы
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/pricing')
+def pricing():
+    return render_template('pricing.html')
+
+
+@app.route('/terms')
+def terms():
+    return render_template('legal.html', kind='terms')
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('legal.html', kind='privacy')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if g.user:
+        return redirect(url_for('account'))
+    error, email = None, ''
+    if request.method == 'POST':
+        check_csrf()
+        con = db()
+        email = (request.form.get('email') or '').strip().lower()
+        pw = request.form.get('password') or ''
+        if too_many(con, 'reg|' + client_ip(), 5, 3600):
+            error = t('err_too_many')
+        elif not re.fullmatch(r'[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}', email) or len(email) > 200:
+            error = t('err_email')
+        elif len(pw) < 8 or len(pw) > 200:
+            error = t('err_password_short')
+        elif request.form.get('agree') != '1':
+            error = t('err_agree')
+        else:
+            try:
+                cur = con.execute('INSERT INTO users (email, pw_hash, lang, created_at, trial_end) VALUES (?,?,?,?,?)',
+                                  (email, generate_password_hash(pw), g.lang, now(), now() + TRIAL_DAYS * 86400))
+                con.commit()
+            except sqlite3.IntegrityError:
+                error = t('err_email_taken')
+            else:
+                note_attempt(con, 'reg|' + client_ip())
+                start_session(con.execute('SELECT * FROM users WHERE id=?', (cur.lastrowid,)).fetchone())
+                return redirect(url_for('account', welcome=1))
+    return render_template('auth.html', mode='register', error=error, email=email)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if g.user:
+        return redirect(url_for('account'))
+    error, email = (t('err_banned') if request.args.get('banned') else None), ''
+    if request.method == 'POST':
+        check_csrf()
+        con = db()
+        email = (request.form.get('email') or '').strip().lower()
+        keys = ('login|' + client_ip(), 'login|' + email)
+        if too_many(con, keys[0], 20, 900) or too_many(con, keys[1], 8, 900):
+            error = t('err_too_many')
+        else:
+            row = con.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
+            pw_ok = check_password_hash(row['pw_hash'] if row else DUMMY_HASH, request.form.get('password') or '')
+            if row and pw_ok and row['banned']:
+                error = t('err_banned')
+            elif row and pw_ok:
+                start_session(row)
+                nxt = request.args.get('next') or ''
+                return redirect(nxt if re.fullmatch(r'/[A-Za-z0-9/_\-]*', nxt) else url_for('account'))
+            else:
+                for k in keys:
+                    note_attempt(con, k)
+                error = t('err_login')
+    return render_template('auth.html', mode='login', error=error, email=email)
+
+
+DUMMY_HASH = generate_password_hash('dummy-password-for-timing')
+
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    check_csrf()
+    lang = g.lang
+    session.clear()
+    session['lang'] = lang
+    return redirect(url_for('index'))
+
+
+def send_mail(to, subject, body):
+    if not SMTP_HOST:
+        return False
+    msg = EmailMessage()
+    msg['From'], msg['To'], msg['Subject'] = SMTP_FROM, to, subject
+    msg.set_content(body)
+    try:
+        s = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) if SMTP_PORT == 465 else smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
+        if SMTP_PORT != 465:
+            s.starttls()
+        if SMTP_USER:
+            s.login(SMTP_USER, SMTP_PASSWORD)
+        s.send_message(msg)
+        s.quit()
+        return True
+    except Exception:
+        log.exception('SMTP error')
+        return False
+
+
+@app.route('/forgot', methods=['GET', 'POST'])
+def forgot():
+    sent = False
+    if request.method == 'POST':
+        check_csrf()
+        con = db()
+        email = (request.form.get('email') or '').strip().lower()
+        if not too_many(con, 'forgot|' + client_ip(), 5, 3600):
+            note_attempt(con, 'forgot|' + client_ip())
+            row = con.execute('SELECT * FROM users WHERE email=? AND banned=0', (email,)).fetchone()
+            if row:
+                token = secrets.token_urlsafe(32)
+                con.execute('UPDATE users SET reset_token=?, reset_expires=? WHERE id=?',
+                            (hashlib.sha256(token.encode()).hexdigest(), now() + 3600, row['id']))
+                con.commit()
+                link = f'{BASE_URL}/reset/{token}'
+                if not send_mail(email, t('reset_mail_subject'), t('reset_mail_body', link=link)):
+                    log.warning('Письмо не отправлено (SMTP не настроен). Ссылка сброса для %s: %s', email, link)
+        sent = True
+    return render_template('auth.html', mode='forgot', sent=sent, error=None, email='')
+
+
+@app.route('/reset/<token>', methods=['GET', 'POST'])
+def reset(token):
+    con = db()
+    row = con.execute('SELECT * FROM users WHERE reset_token=? AND reset_expires>? AND banned=0',
+                      (hashlib.sha256(token.encode()).hexdigest(), now())).fetchone()
+    if not row:
+        return render_template('auth.html', mode='reset', invalid=True, error=None, email='')
+    error = None
+    if request.method == 'POST':
+        check_csrf()
+        pw = request.form.get('password') or ''
+        if len(pw) < 8 or len(pw) > 200:
+            error = t('err_password_short')
+        else:
+            con.execute('UPDATE users SET pw_hash=?, reset_token=NULL, reset_expires=NULL, session_ver=session_ver+1 WHERE id=?',
+                        (generate_password_hash(pw), row['id']))
+            con.commit()
+            start_session(con.execute('SELECT * FROM users WHERE id=?', (row['id'],)).fetchone())
+            return redirect(url_for('account', pwchanged=1))
+    return render_template('auth.html', mode='reset', invalid=False, error=error, email='')
+
+
+@app.route('/account')
+@login_required
+def account():
+    con = db()
+    oid = request.args.get('o') or ''
+    if oid and request.args.get('paid'):
+        # вернулись со страницы ЮMoney — сразу проверяем оплату на сервере (не чаще 6 раз в минуту)
+        order = con.execute('SELECT * FROM orders WHERE id=? AND user_id=?', (oid, g.user['id'])).fetchone()
+        if order and order['status'] == 'pending' and not too_many(con, 'check|' + str(g.user['id']), 6, 60):
+            note_attempt(con, 'check|' + str(g.user['id']))
+            try:
+                if verify_order(con, order):
+                    g.user = con.execute('SELECT * FROM users WHERE id=?', (g.user['id'],)).fetchone()
+                    return render_template('account.html', orders=account_orders(con), confirmed=True)
+            except YooMoneyError:
+                pass
+            return redirect(url_for('account', o=oid, notyet=1))
+    return render_template('account.html', orders=account_orders(con), confirmed=False)
+
+
+def account_orders(con):
+    return con.execute("SELECT * FROM orders WHERE user_id=? AND (status IN ('review','paid','rejected') "
+                       "OR (status='pending' AND method LIKE 'yoomoney%' AND created_at>?)) "
+                       "ORDER BY created_at DESC LIMIT 10", (g.user['id'], now() - 2 * 86400)).fetchall()
+
+
+@app.route('/account/password', methods=['POST'])
+@login_required
+def change_password():
+    check_csrf()
+    if not check_password_hash(g.user['pw_hash'], request.form.get('old') or ''):
+        return redirect(url_for('account', pwerr=1))
+    pw = request.form.get('new') or ''
+    if len(pw) < 8 or len(pw) > 200:
+        return redirect(url_for('account', pwerr=2))
+    con = db()
+    con.execute('UPDATE users SET pw_hash=?, session_ver=session_ver+1 WHERE id=?', (generate_password_hash(pw), g.user['id']))
+    con.commit()
+    start_session(con.execute('SELECT * FROM users WHERE id=?', (g.user['id'],)).fetchone())   # другие устройства выйдут
+    return redirect(url_for('account', pwchanged=1))
+
+
+# ---------------------------------------------------------------- игры и скачивание
+@app.route('/play/<game>')
+@login_required
+def play(game):
+    if game not in GAMES:
+        abort(404)
+    if not can_play(g.user):
+        return redirect(url_for('pricing', need=1))
+    return render_template('play.html', game=game)
+
+
+@app.route('/games/<game>/')
+@login_required
+def game_file(game):
+    if game not in GAMES or not can_play(g.user):
+        abort(403)
+    resp = send_from_directory(GAMES_DIR / game, 'index.html')
+    resp.headers['Cache-Control'] = 'private, no-store'
+    return resp
+
+
+def list_downloads():
+    if not DOWNLOADS_DIR.is_dir():
+        return []
+    files = [p for p in DOWNLOADS_DIR.iterdir() if p.is_file() and p.suffix.lower() in DOWNLOAD_EXT]
+    return sorted(({'name': p.name, 'size': p.stat().st_size, 'mtime': int(p.stat().st_mtime)} for p in files),
+                  key=lambda f: f['name'].lower())
+
+
+@app.route('/downloads')
+def downloads():
+    ok = can_download(g.user)
+    return render_template('downloads.html', files=list_downloads() if ok else [], access=ok)
+
+
+@app.route('/download/<name>')
+@login_required
+def download_file(name):
+    if not can_download(g.user):
+        return redirect(url_for('downloads'))
+    if name != secure_filename(name) or Path(name).suffix.lower() not in DOWNLOAD_EXT or not (DOWNLOADS_DIR / name).is_file():
+        abort(404)
+    resp = send_from_directory(DOWNLOADS_DIR, name, as_attachment=True)
+    resp.headers['Cache-Control'] = 'private, no-store'
+    return resp
+
+
+# ---------------------------------------------------------------- покупки
+def new_order(con, user_id, product, method, status='pending'):
+    oid = secrets.token_hex(8)
+    con.execute('INSERT INTO orders (id, user_id, product, amount, method, status, created_at) VALUES (?,?,?,?,?,?,?)',
+                (oid, user_id, product, PRODUCTS[product]['price'], method, status, now()))
+    con.commit()
+    return oid
+
+
+def complete_order(con, order, operation_id=None):
+    """Отметить заказ оплаченным и выдать доступ (повторный вызов ничего не делает)."""
+    cur = con.execute("UPDATE orders SET status='paid', paid_at=?, operation_id=COALESCE(?, operation_id) "
+                      "WHERE id=? AND status IN ('pending','review')", (now(), operation_id, order['id']))
+    con.commit()
+    if cur.rowcount:
+        grant(con, order['user_id'], product=order['product'])
+        log.info('Заказ %s оплачен (%s, %s ₽, user %s)', order['id'], order['product'], order['amount'], order['user_id'])
+        return True
+    return False
+
+
+@app.route('/buy', methods=['POST'])
+@login_required
+def buy():
+    check_csrf()
+    product = request.form.get('product')
+    method = request.form.get('method')
+    if product not in PRODUCTS:
+        abort(400)
+    if product == 'forever' and g.user['lifetime']:
+        return redirect(url_for('account'))
+    con = db()
+    if too_many(con, 'buy|' + str(g.user['id']), 20, 3600):
+        return redirect(url_for('pricing', toomany=1))
+    note_attempt(con, 'buy|' + str(g.user['id']))
+    price = PRODUCTS[product]['price']
+
+    if method == 'balance':
+        cur = con.execute('UPDATE users SET balance=ROUND(balance-?, 2) WHERE id=? AND balance>=?', (price, g.user['id'], price))
+        con.commit()
+        if not cur.rowcount:
+            return redirect(url_for('pricing', lowbalance=1))
+        con.execute('INSERT INTO balance_log (user_id, delta, reason, created_at) VALUES (?,?,?,?)',
+                    (g.user['id'], -price, f'Покупка: {product}', now()))
+        oid = new_order(con, g.user['id'], product, 'balance')
+        complete_order(con, con.execute('SELECT * FROM orders WHERE id=?', (oid,)).fetchone())
+        return redirect(url_for('account', paid=1))
+
+    if method not in methods_available():
+        return redirect(url_for('pricing', unavailable=1))
+    oid = new_order(con, g.user['id'], product, method)
+    return redirect(url_for('pay', oid=oid))
+
+
+@app.route('/pay/<oid>')
+@login_required
+def pay(oid):
+    order = db().execute('SELECT * FROM orders WHERE id=? AND user_id=?', (oid, g.user['id'])).fetchone()
+    if not order:
+        abort(404)
+    if order['status'] in ('paid', 'review', 'rejected') or order['method'] == 'balance':
+        return redirect(url_for('account'))
+    if order['method'].startswith('yoomoney') and order['status'] == 'pending':
+        form = {'receiver': YOOMONEY_WALLET, 'quickpay-form': 'button', 'sum': f"{order['amount']:.2f}",
+                'label': order['id'], 'paymentType': 'AC' if order['method'] == 'yoomoney_card' else 'PC',
+                'successURL': f'{BASE_URL}/account?paid=1&o={order["id"]}',   # это лишь возврат на сайт: оплату проверяет сервер
+                'targets': f'{SITE_NAME}: {t("plan_" + order["product"])}'}
+        return render_template('pay_yoomoney.html', form=form, order=order)
+    return render_template('pay_card.html', order=order, card=fmt_card(CARD_NUMBER), holder=CARD_HOLDER, bank=CARD_BANK,
+                           code=order['id'][:6].upper())
+
+
+@app.route('/pay/<oid>/sent', methods=['POST'])
+@login_required
+def pay_sent(oid):
+    check_csrf()
+    con = db()
+    note = (request.form.get('note') or '').strip()[:200]
+    con.execute("UPDATE orders SET status='review', payer_note=? WHERE id=? AND user_id=? AND method='card' AND status='pending'",
+                (note, oid, g.user['id']))
+    con.commit()
+    return redirect(url_for('account', review=1))
+
+
+# ---------------------------------------------------------------- проверка оплат ЮMoney на сервере
+# Сайт не верит ни браузеру, ни содержимому уведомления: факт оплаты сервер сам запрашивает
+# у ЮMoney по HTTPS (проверка сертификата, токен OAuth в заголовке) в истории операций кошелька.
+_TLS = ssl.create_default_context()
+_TLS.minimum_version = ssl.TLSVersion.TLSv1_2
+
+
+class YooMoneyError(Exception):
+    pass
+
+
+def ym_api(method, params, token=None):
+    """Защищённый запрос к API ЮMoney. Возвращает JSON."""
+    if not token:
+        raise YooMoneyError('нет токена ЮMoney')
+    req = urllib.request.Request(f'{YOOMONEY_API}/api/{method}', data=urllib.parse.urlencode(params).encode(),
+                                 headers={'Authorization': f'Bearer {token}',
+                                          'Content-Type': 'application/x-www-form-urlencoded',
+                                          'User-Agent': 'kolca-orbity-site'}, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=15, context=_TLS if YOOMONEY_API.startswith('https') else None) as r:
+            data = json.loads(r.read(1_000_000).decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            log.error('ЮMoney: токен недействителен — выполните  sudo bash manage.sh yoomoney-auth')
+        raise YooMoneyError(f'HTTP {e.code}') from None
+    except (urllib.error.URLError, TimeoutError, ValueError) as e:
+        raise YooMoneyError(str(e)) from None
+    if isinstance(data, dict) and data.get('error'):
+        raise YooMoneyError(data['error'])
+    return data
+
+
+def verify_order(con, order):
+    """Спросить у ЮMoney, пришли ли деньги по заказу. True — заказ оплачен (сейчас или раньше)."""
+    if order['status'] == 'paid':
+        return True
+    if not order['method'].startswith('yoomoney') or order['status'] != 'pending':
+        return False
+    data = ym_api('operation-history', {'type': 'deposition', 'label': order['id'], 'records': 10}, token=yoomoney_token(con))
+    for op in data.get('operations') or []:
+        if op.get('label') != order['id'] or op.get('direction') != 'in' or op.get('status') != 'success':
+            continue
+        credited = float(op.get('amount') or 0)
+        if credited + 0.01 < order['amount'] * YOOMONEY_MIN_SHARE:
+            con.execute('UPDATE orders SET payer_note=? WHERE id=?',
+                        (f"Недоплата: пришло {credited:.2f} ₽ (операция {op.get('operation_id')})", order['id']))
+            con.commit()
+            log.warning('ЮMoney: по заказу %s пришло %.2f ₽ при цене %.2f ₽', order['id'], credited, order['amount'])
+            continue
+        try:
+            complete_order(con, order, operation_id=str(op.get('operation_id')))
+        except sqlite3.IntegrityError:
+            con.rollback()        # не держим блокировку базы
+            log.warning('ЮMoney: операция %s уже засчитана другому заказу', op.get('operation_id'))
+            continue
+        return True
+    return False
+
+
+def check_pending_orders(con, max_checks=25):
+    """Фоновая проверка неоплаченных заказов ЮMoney за последние 2 суток."""
+    if not yoomoney_token(con):
+        return 0
+    rows = con.execute("SELECT * FROM orders WHERE status='pending' AND method LIKE 'yoomoney%' AND created_at>? "
+                       "ORDER BY created_at DESC LIMIT ?", (now() - 2 * 86400, max_checks)).fetchall()
+    done = 0
+    for o in rows:
+        try:
+            done += verify_order(con, o)
+        except YooMoneyError as e:
+            log.warning('ЮMoney: проверка заказа %s не удалась: %s', o['id'], e)
+            break
+    return done
+
+
+def yoomoney_signature_ok(f):
+    fields = ('notification_type', 'operation_id', 'amount', 'currency', 'datetime', 'sender', 'codepro')
+    base = '&'.join(f.get(k, '') for k in fields) + '&' + YOOMONEY_SECRET + '&' + f.get('label', '')
+    expected = hashlib.sha1(base.encode('utf-8')).hexdigest()
+    return hmac.compare_digest(expected, (f.get('sha1_hash') or '').lower())
+
+
+@app.route('/webhooks/yoomoney', methods=['POST'])
+def yoomoney_webhook():
+    """Уведомление ЮMoney — только сигнал «проверь заказ». Сами данные уведомления не используются:
+    оплату подтверждает сервер запросом к API ЮMoney."""
+    if not YOOMONEY_SECRET:
+        abort(404)
+    f = request.form.to_dict()
+    if not yoomoney_signature_ok(f):
+        log.warning('ЮMoney: неверная подпись уведомления от %s', client_ip())
+        abort(400)
+    con = db()
+    order = con.execute('SELECT * FROM orders WHERE id=?', (f.get('label') or '',)).fetchone()
+    if order:
+        try:
+            verify_order(con, order)
+        except YooMoneyError as e:
+            log.warning('ЮMoney: не удалось проверить заказ %s сразу (%s) — проверит фоновая задача', order['id'], e)
+    return 'ok'
+
+
+@app.route('/pay/<oid>/check', methods=['POST'])
+@login_required
+def pay_check(oid):
+    """Кнопка «Проверить оплату»: сервер сам спрашивает ЮMoney."""
+    check_csrf()
+    con = db()
+    order = con.execute('SELECT * FROM orders WHERE id=? AND user_id=?', (oid, g.user['id'])).fetchone()
+    if not order:
+        abort(404)
+    if too_many(con, 'check|' + str(g.user['id']), 6, 60):
+        return redirect(url_for('account', o=oid, wait=1))
+    note_attempt(con, 'check|' + str(g.user['id']))
+    try:
+        paid = verify_order(con, order)
+    except YooMoneyError:
+        paid = False
+    return redirect(url_for('account', paid=1) if paid else url_for('account', o=oid, notyet=1))
+
+
+@app.route('/yoomoney/oauth')
+def yoomoney_oauth_code():
+    """Сюда ЮMoney возвращает код подтверждения — его нужно вставить в терминал (manage.sh yoomoney-auth)."""
+    code = request.args.get('code') or ''
+    error = request.args.get('error') or ''
+    return render_template('oauth_code.html', code=code if re.fullmatch(r'[A-Za-z0-9._\-]{10,600}', code) else '', error=error)
+
+
+def run_worker():
+    log.info('Фоновая проверка оплат запущена')
+    while True:
+        con = db_connect()
+        try:
+            n = check_pending_orders(con)
+            if n:
+                log.info('Фоновая проверка: оплачено заказов — %s', n)
+        except Exception:
+            log.exception('worker')
+        finally:
+            con.close()
+        time.sleep(int(env('WORKER_INTERVAL') or 60))
+
+
+# ---------------------------------------------------------------- админка
+admin = Blueprint('admin', __name__)
+
+
+def admin_pw_hash(con):
+    return setting(con, 'admin_pw_hash')
+
+
+def admin_logged_in():
+    a = session.get('adm')
+    if not a:
+        return False
+    con = db()
+    h = admin_pw_hash(con)
+    if (not h or a.get('v') != hashlib.sha256(h.encode()).hexdigest()[:16]
+            or a.get('ip') != client_ip() or now() - a.get('t', 0) > 2 * 3600):
+        session.pop('adm', None)
+        return False
+    a['t'] = now()
+    session['adm'] = a
+    return True
+
+
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*a, **kw):
+        if not admin_logged_in():
+            return redirect(url_for('admin.login'))
+        return f(*a, **kw)
+    return wrapper
+
+
+def admin_log(con, action, target='', details=''):
+    con.execute('INSERT INTO admin_log (action, target_email, details, ip, created_at) VALUES (?,?,?,?,?)',
+                (action, target, details, client_ip(), now()))
+    con.commit()
+
+
+@admin.route('/login', methods=['GET', 'POST'])
+def login():
+    con = db()
+    error = None
+    if not admin_pw_hash(con):
+        return render_template('admin_login.html', no_password=True, error=None)
+    if request.method == 'POST':
+        check_csrf()
+        ip_key, all_key = 'admin|' + client_ip(), 'admin|*'
+        if too_many(con, ip_key, 5, 900) or too_many(con, all_key, 30, 900):
+            error = 'Слишком много попыток. Подождите 15 минут.'
+        elif check_password_hash(admin_pw_hash(con), request.form.get('password') or ''):
+            lang = g.lang
+            uid, sv = session.get('uid'), session.get('sv')
+            session.clear()
+            session.update(lang=lang, csrf=secrets.token_urlsafe(24),
+                           adm={'t': now(), 'ip': client_ip(), 'v': hashlib.sha256(admin_pw_hash(con).encode()).hexdigest()[:16]})
+            if uid:
+                session.update(uid=uid, sv=sv)
+            admin_log(con, 'Вход в админку')
+            return redirect(url_for('admin.users'))
+        else:
+            note_attempt(con, ip_key)
+            note_attempt(con, all_key)
+            log.warning('Неудачный вход в админку с %s', client_ip())
+            time.sleep(1)
+            error = 'Неверный пароль.'
+    return render_template('admin_login.html', no_password=False, error=error)
+
+
+@admin.route('/logout', methods=['POST'])
+def logout():
+    check_csrf()
+    session.pop('adm', None)
+    return redirect(url_for('index'))
+
+
+@admin.route('/')
+@admin_required
+def users():
+    con = db()
+    q = (request.args.get('q') or '').strip().lower()[:100]
+    flt = request.args.get('f') or ''
+    page = max(1, min(10_000, int(request.args.get('page') or 1) if (request.args.get('page') or '1').isdigit() else 1))
+    where, args = ['1=1'], []
+    if q:
+        where.append('email LIKE ?')
+        args.append(f'%{q}%')
+    if flt == 'forever':
+        where.append('lifetime=1')
+    elif flt == 'active':
+        where.append('(lifetime=1 OR paid_until>? OR trial_end>?)')
+        args += [now(), now()]
+    elif flt == 'banned':
+        where.append('banned=1')
+    elif flt == 'balance':
+        where.append('balance>0')
+    w = ' AND '.join(where)
+    total = con.execute(f'SELECT COUNT(*) FROM users WHERE {w}', args).fetchone()[0]
+    rows = con.execute(f'SELECT * FROM users WHERE {w} ORDER BY id DESC LIMIT 50 OFFSET ?', (*args, (page - 1) * 50)).fetchall()
+    one = lambda sql, *a: con.execute(sql, a).fetchone()[0]
+    stats = dict(
+        users=one('SELECT COUNT(*) FROM users'),
+        forever=one('SELECT COUNT(*) FROM users WHERE lifetime=1'),
+        month=one('SELECT COUNT(*) FROM users WHERE lifetime=0 AND paid_until>?', now()),
+        review=one("SELECT COUNT(*) FROM orders WHERE status='review'"),
+        revenue_month=one("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='paid' AND method!='balance' AND paid_at>?", now() - 30 * 86400),
+        revenue_total=one("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='paid' AND method!='balance'"),
+    )
+    stats['ym'] = bool(YOOMONEY_WALLET and yoomoney_token(con))
+    return render_template('admin_users.html', rows=rows, stats=stats, q=q, f=flt, page=page,
+                           pages=max(1, (total + 49) // 50), total=total)
+
+
+@admin.route('/user/<int:uid>')
+@admin_required
+def user(uid):
+    con = db()
+    u = con.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    if not u:
+        abort(404)
+    return render_template('admin_user.html', u=u, msg=request.args.get('msg'),
+                           orders=con.execute('SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,)).fetchall(),
+                           balance_log=con.execute('SELECT * FROM balance_log WHERE user_id=? ORDER BY id DESC LIMIT 30', (uid,)).fetchall())
+
+
+def parse_amount(s):
+    try:
+        v = round(float((s or '').replace(',', '.').replace(' ', '')), 2)
+    except ValueError:
+        return None
+    return v if 0 < v <= 10_000_000 else None
+
+
+@admin.route('/user/<int:uid>/<action>', methods=['POST'])
+@admin_required
+def user_action(uid, action):
+    check_csrf()
+    con = db()
+    u = con.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    if not u:
+        abort(404)
+    if action == 'add_days':
+        try:
+            days = int(request.form.get('days') or 0)
+        except ValueError:
+            days = 0
+        if not 1 <= days <= 3650:
+            return redirect(url_for('admin.user', uid=uid, msg='bad_days'))
+        grant(con, uid, days=days)
+        admin_log(con, 'Добавил дни', u['email'], f'{days} дн.')
+        msg = 'granted'
+    elif action == 'give_forever':
+        grant(con, uid, product='forever')
+        admin_log(con, 'Выдал «Навсегда»', u['email'])
+        msg = 'forever'
+    elif action == 'revoke':
+        con.execute('UPDATE users SET lifetime=0, paid_until=NULL, trial_end=? WHERE id=?', (now() - 1, uid))
+        con.commit()
+        admin_log(con, 'Снял подписку', u['email'])
+        msg = 'revoked'
+    elif action in ('balance_add', 'balance_sub'):
+        amount = parse_amount(request.form.get('amount'))
+        if amount is None:
+            return redirect(url_for('admin.user', uid=uid, msg='bad_amount'))
+        reason = (request.form.get('reason') or '').strip()[:200] or ('Начисление' if action == 'balance_add' else 'Списание')
+        delta = amount if action == 'balance_add' else -min(amount, max(0.0, u['balance']))
+        change_balance(con, uid, delta, reason)
+        admin_log(con, 'Баланс', u['email'], f'{delta:+.2f} ₽ — {reason}')
+        msg = 'balance'
+    elif action == 'ban':
+        reason = (request.form.get('reason') or '').strip()[:200]
+        con.execute('UPDATE users SET banned=1, ban_reason=?, session_ver=session_ver+1 WHERE id=?', (reason, uid))
+        con.commit()
+        admin_log(con, 'Заблокировал', u['email'], reason)
+        msg = 'banned'
+    elif action == 'unban':
+        con.execute('UPDATE users SET banned=0, ban_reason=NULL WHERE id=?', (uid,))
+        con.commit()
+        admin_log(con, 'Разблокировал', u['email'])
+        msg = 'unbanned'
+    elif action == 'logout_all':
+        con.execute('UPDATE users SET session_ver=session_ver+1 WHERE id=?', (uid,))
+        con.commit()
+        admin_log(con, 'Завершил сеансы', u['email'])
+        msg = 'sessions'
+    elif action == 'delete':
+        if (request.form.get('confirm') or '').strip().lower() != u['email']:
+            return redirect(url_for('admin.user', uid=uid, msg='bad_confirm'))
+        con.execute('DELETE FROM balance_log WHERE user_id=?', (uid,))
+        con.execute('UPDATE orders SET user_id=NULL WHERE user_id=?', (uid,))     # оплаты остаются в истории
+        con.execute('DELETE FROM users WHERE id=?', (uid,))
+        con.commit()
+        admin_log(con, 'Удалил аккаунт', u['email'])
+        return redirect(url_for('admin.users', msg='deleted'))
+    else:
+        abort(400)
+    return redirect(url_for('admin.user', uid=uid, msg=msg))
+
+
+@admin.route('/orders')
+@admin_required
+def orders():
+    con = db()
+    rows = con.execute("SELECT o.*, u.email FROM orders o LEFT JOIN users u ON u.id=o.user_id "
+                       "WHERE o.status!='pending' OR o.created_at>? ORDER BY (o.status='review') DESC, o.created_at DESC LIMIT 200",
+                       (now() - 86400,)).fetchall()
+    return render_template('admin_orders.html', rows=rows, msg=request.args.get('msg'))
+
+
+@admin.route('/orders/<oid>/<action>', methods=['POST'])
+@admin_required
+def order_action(oid, action):
+    check_csrf()
+    con = db()
+    o = con.execute('SELECT o.*, u.email FROM orders o LEFT JOIN users u ON u.id=o.user_id WHERE o.id=?', (oid,)).fetchone()
+    if not o or not o['user_id']:
+        abort(404)
+    if action == 'confirm':
+        complete_order(con, o)
+        admin_log(con, 'Подтвердил оплату', o['email'], f"{o['product']}, {fmt_rub(o['amount'])}")
+    elif action == 'reject':
+        con.execute("UPDATE orders SET status='rejected' WHERE id=? AND status IN ('pending','review')", (oid,))
+        con.commit()
+        admin_log(con, 'Отклонил оплату', o['email'], f"{o['product']}, {fmt_rub(o['amount'])}")
+    else:
+        abort(400)
+    return redirect(url_for('admin.orders', msg=action))
+
+
+@admin.route('/downloads', methods=['GET', 'POST'])
+@admin_required
+def downloads():
+    msg = None
+    if request.method == 'POST':
+        check_csrf()
+        con = db()
+        if request.form.get('delete'):
+            name = secure_filename(request.form['delete'])
+            p = DOWNLOADS_DIR / name
+            if name and p.is_file():
+                p.unlink()
+                admin_log(con, 'Удалил файл', '', name)
+                msg = 'deleted'
+        else:
+            DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            saved = []
+            for f in request.files.getlist('files'):
+                name = secure_filename(f.filename or '')
+                if name and Path(name).suffix.lower() in DOWNLOAD_EXT:
+                    f.save(DOWNLOADS_DIR / name)
+                    saved.append(name)
+            if saved:
+                admin_log(con, 'Загрузил файлы', '', ', '.join(saved))
+            msg = 'uploaded' if saved else 'bad_file'
+    return render_template('admin_downloads.html', files=list_downloads(), msg=msg, exts=', '.join(sorted(DOWNLOAD_EXT)))
+
+
+@admin.route('/log')
+@admin_required
+def journal():
+    return render_template('admin_log.html', rows=db().execute('SELECT * FROM admin_log ORDER BY id DESC LIMIT 300').fetchall())
+
+
+if ADMIN_PATH and re.fullmatch(r'[A-Za-z0-9_\-]{8,64}', ADMIN_PATH):
+    app.register_blueprint(admin, url_prefix='/' + ADMIN_PATH)
+else:
+    log.warning('ADMIN_PATH не задан или слишком короткий (нужно 8+ символов) — админка выключена')
+
+
+# ---------------------------------------------------------------- служебное
+@app.route('/healthz')
+def healthz():
+    db().execute('SELECT 1')
+    return 'ok'
+
+
+@app.errorhandler(400)
+@app.errorhandler(403)
+@app.errorhandler(404)
+@app.errorhandler(413)
+def http_error(e):
+    return render_template('error.html', code=e.code), e.code
+
+
+def cli_admin_password():
+    pw = None
+    if not sys.stdin.isatty():
+        pw = sys.stdin.readline().rstrip('\r\n')       # из manage.sh пароль приходит через stdin
+    if not pw:
+        pw = getpass.getpass('Новый пароль администратора (от 12 символов): ')
+        if pw != getpass.getpass('Повторите пароль: '):
+            sys.exit('Пароли не совпадают')
+    if len(pw) < 12:
+        sys.exit('Слишком короткий пароль: нужно хотя бы 12 символов')
+    con = db_connect()
+    set_setting(con, 'admin_pw_hash', generate_password_hash(pw))
+    con.execute("INSERT INTO admin_log (action, created_at, ip) VALUES ('Сменён пароль администратора (из терминала)', ?, 'console')", (now(),))
+    con.commit()
+    print('Пароль администратора сохранён. Все прежние входы в админку завершены.')
+
+
+def cli_stats():
+    con = db_connect()
+    one = lambda sql, *a: con.execute(sql, a).fetchone()[0]
+    print(f"Пользователей: {one('SELECT COUNT(*) FROM users')}")
+    print(f"«Навсегда»:    {one('SELECT COUNT(*) FROM users WHERE lifetime=1')}")
+    print(f"Месяц онлайн:  {one('SELECT COUNT(*) FROM users WHERE lifetime=0 AND paid_until>?', now())}")
+    review = one("SELECT COUNT(*) FROM orders WHERE status='review'")
+    total = one("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='paid' AND method!='balance'")
+    print(f'Ждут проверки переводов: {review}')
+    print(f'Оплачено всего: {fmt_rub(total)}')
+
+
+def cli_yoomoney_auth():
+    """Получить токен ЮMoney (права: история и детали операций) — всё в терминале."""
+    if not YOOMONEY_CLIENT_ID:
+        sys.exit('Сначала впишите YOOMONEY_CLIENT_ID (sudo bash manage.sh config)')
+    redirect_uri = YOOMONEY_REDIRECT_URI or f'{BASE_URL}/yoomoney/oauth'
+    q = urllib.parse.urlencode({'client_id': YOOMONEY_CLIENT_ID, 'response_type': 'code',
+                                'redirect_uri': redirect_uri, 'scope': 'operation-history operation-details'})
+    print('\n1) Откройте ссылку в браузере (можно на телефоне), войдите в ЮMoney и нажмите «Разрешить»:\n')
+    print(f'   {YOOMONEY_API}/oauth/authorize?{q}\n')
+    print('2) Откроется страница с кодом. Скопируйте код — или, если страница не открылась,')
+    print('   скопируйте целиком адрес из строки браузера (в нём есть code=...) — и вставьте сюда.\n')
+    code = (sys.stdin.readline() if not sys.stdin.isatty() else input('Код или адрес: ')).strip()
+    if 'code=' in code:
+        code = (urllib.parse.parse_qs(urllib.parse.urlsplit(code).query).get('code') or [''])[0]
+    if not code:
+        sys.exit('Код не введён')
+    params = {'code': code, 'client_id': YOOMONEY_CLIENT_ID, 'grant_type': 'authorization_code', 'redirect_uri': redirect_uri}
+    if YOOMONEY_CLIENT_SECRET:
+        params['client_secret'] = YOOMONEY_CLIENT_SECRET
+    req = urllib.request.Request(f'{YOOMONEY_API}/oauth/token', data=urllib.parse.urlencode(params).encode(),
+                                 headers={'Content-Type': 'application/x-www-form-urlencoded'}, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=20, context=_TLS if YOOMONEY_API.startswith('https') else None) as r:
+            data = json.loads(r.read().decode())
+    except Exception as e:
+        sys.exit(f'Не удалось получить токен: {e}')
+    token = data.get('access_token')
+    if not token:
+        sys.exit(f"ЮMoney отказал: {data.get('error') or data}")
+    info = ym_api('account-info', {}, token=token)
+    if YOOMONEY_WALLET and str(info.get('account')) != YOOMONEY_WALLET:
+        sys.exit(f"Токен от другого кошелька ({info.get('account')}), а в настройках {YOOMONEY_WALLET}. Войдите в нужный кошелёк.")
+    con = db_connect()
+    set_setting(con, 'yoomoney_token', token)
+    con.execute("INSERT INTO admin_log (action, details, ip, created_at) VALUES ('Подключён API ЮMoney', ?, 'console', ?)",
+                (f"кошелёк {info.get('account')}", now()))
+    con.commit()
+    print(f"Готово: кошелёк {info.get('account')} подключён, оплаты проверяются через API.")
+
+
+def cli_yoomoney_check():
+    con = db_connect()
+    token = yoomoney_token(con)
+    if not token:
+        sys.exit('API ЮMoney не подключён: sudo bash manage.sh yoomoney-auth')
+    info = ym_api('account-info', {}, token=token)
+    print(f"Кошелёк {info.get('account')}: связь с API есть, баланс {info.get('balance')} ₽, статус {info.get('account_status')}")
+    print(f'Проверено неоплаченных заказов, найдено оплат: {check_pending_orders(con)}')
+
+
+def cli_add_file(path):
+    src = Path(path)
+    if not src.is_file() or src.suffix.lower() not in DOWNLOAD_EXT:
+        sys.exit(f'Нужен файл {", ".join(sorted(DOWNLOAD_EXT))}: {path}')
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, DOWNLOADS_DIR / secure_filename(src.name))
+    print('Добавлен файл для скачивания:', secure_filename(src.name))
+
+
+if __name__ == '__main__':
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'dev'
+    if cmd == 'admin-password':
+        cli_admin_password()
+    elif cmd == 'stats':
+        cli_stats()
+    elif cmd == 'worker':
+        run_worker()
+    elif cmd == 'yoomoney-auth':
+        cli_yoomoney_auth()
+    elif cmd == 'yoomoney-check':
+        cli_yoomoney_check()
+    elif cmd == 'add-file' and len(sys.argv) > 2:
+        cli_add_file(sys.argv[2])
+    elif cmd == 'dev':
+        app.run(host='127.0.0.1', port=int(env('PORT') or 8000))
+    else:
+        sys.exit(__doc__)
