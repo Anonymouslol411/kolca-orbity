@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('support_title') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <h1>{{ fmt_rub(amount) }}</h1>
+  <p class="lead">{{ t('go_lead', stars=stars) }}</p>
+  <div class="card go-steps">
+    <a class="btn big wide" href="{{ app_url }}">{{ t('go_app') }}</a>
+    <a class="btn ghost big wide" href="{{ web_url }}" target="_blank" rel="noopener">{{ t('go_web') }}</a>
+    <p class="fine">{{ t('go_manual', bot='@' + bot, amount=amount) }}</p>
+  </div>
+  <p><a href="{{ url_for('support') }}">{{ t('go_back') }}</a></p>
+</section>
+{% endblock %}
