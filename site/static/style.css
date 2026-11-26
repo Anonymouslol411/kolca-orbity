@@ -355,3 +355,6 @@ a.plain:hover { color: var(--amber-hi); }
 .amount-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
 .amount-row input { margin-top: 0 !important; font-size: 24px !important; font-weight: 700; font-variant-numeric: tabular-nums; }
 .amount-row .cur { font-size: 24px; font-weight: 700; color: var(--dim); }
+
+.go-steps { display: grid; gap: 12px; }
+.go-steps .fine { margin: 6px 0 0; }
