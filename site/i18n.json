@@ -209,12 +209,18 @@
   "games_sub_title": "По подписке",
   "games_sub_note": "Подписка открывает только «Кольца» и «Орбиты».",
   "games_more_title": "Другие игры",
-  "games_more_note": "В подписку не входят — открываются по ссылке.",
+  "games_more_note": "В подписку не входят.",
   "games_soon_title": "Скоро",
   "games_soon": "Скоро",
   "games_open": "Открыть",
   "games_empty": "Новые игры появятся здесь.",
-  "tg_topup": "Пополнить в Telegram"
+  "tg_topup": "Пополнить в Telegram",
+  "game_owned": "Игра куплена",
+  "game_once": "Разовая покупка: игра остаётся у вас навсегда. В подписку не входит.",
+  "game_no_file": "Файл игры скоро появится здесь.",
+  "game_need_account": "Чтобы купить, создайте аккаунт или",
+  "my_games": "Мои игры",
+  "game_deleted": "Игра удалена"
  },
  "en": {
   "tagline": "music games",
@@ -380,12 +386,18 @@
   "games_sub_title": "In the subscription",
   "games_sub_note": "The subscription covers only Rings and Orbits.",
   "games_more_title": "More games",
-  "games_more_note": "Not part of the subscription — they open via a link.",
+  "games_more_note": "Not part of the subscription.",
   "games_soon_title": "Coming soon",
   "games_soon": "Coming soon",
   "games_open": "Open",
   "games_empty": "New games will show up here.",
-  "tg_topup": "Top up in Telegram"
+  "tg_topup": "Top up in Telegram",
+  "game_owned": "You own this game",
+  "game_once": "One-time purchase: the game stays yours forever. Not part of the subscription.",
+  "game_no_file": "The game file will appear here soon.",
+  "game_need_account": "To buy, create an account or",
+  "my_games": "My games",
+  "game_deleted": "Game removed"
  },
  "uk": {
   "tagline": "музичні ігри",
@@ -551,12 +563,18 @@
   "games_sub_title": "За підпискою",
   "games_sub_note": "Підписка відкриває лише «Кільця» та «Орбіти».",
   "games_more_title": "Інші ігри",
-  "games_more_note": "До підписки не входять — відкриваються за посиланням.",
+  "games_more_note": "До підписки не входять.",
   "games_soon_title": "Незабаром",
   "games_soon": "Незабаром",
   "games_open": "Відкрити",
   "games_empty": "Нові ігри з’являться тут.",
-  "tg_topup": "Поповнити в Telegram"
+  "tg_topup": "Поповнити в Telegram",
+  "game_owned": "Гру куплено",
+  "game_once": "Разова покупка: гра залишається у вас назавжди. До підписки не входить.",
+  "game_no_file": "Файл гри незабаром з’явиться тут.",
+  "game_need_account": "Щоб купити, створіть акаунт або",
+  "my_games": "Мої ігри",
+  "game_deleted": "Гру видалено"
  },
  "es": {
   "tagline": "juegos musicales",
@@ -722,12 +740,18 @@
   "games_sub_title": "Con la suscripción",
   "games_sub_note": "La suscripción solo incluye Anillos y Órbitas.",
   "games_more_title": "Más juegos",
-  "games_more_note": "No están en la suscripción: se abren con un enlace.",
+  "games_more_note": "No están en la suscripción.",
   "games_soon_title": "Próximamente",
   "games_soon": "Próximamente",
   "games_open": "Abrir",
   "games_empty": "Aquí aparecerán nuevos juegos.",
-  "tg_topup": "Recargar en Telegram"
+  "tg_topup": "Recargar en Telegram",
+  "game_owned": "Ya tienes este juego",
+  "game_once": "Compra única: el juego es tuyo para siempre. No está en la suscripción.",
+  "game_no_file": "El archivo del juego aparecerá aquí pronto.",
+  "game_need_account": "Para comprar, crea una cuenta o",
+  "my_games": "Mis juegos",
+  "game_deleted": "Juego eliminado"
  },
  "de": {
   "tagline": "Musikspiele",
@@ -893,12 +917,18 @@
   "games_sub_title": "Im Abo",
   "games_sub_note": "Das Abo umfasst nur Ringe und Orbits.",
   "games_more_title": "Weitere Spiele",
-  "games_more_note": "Nicht im Abo – sie öffnen sich über einen Link.",
+  "games_more_note": "Nicht im Abo enthalten.",
   "games_soon_title": "Demnächst",
   "games_soon": "Demnächst",
   "games_open": "Öffnen",
   "games_empty": "Neue Spiele erscheinen hier.",
-  "tg_topup": "In Telegram aufladen"
+  "tg_topup": "In Telegram aufladen",
+  "game_owned": "Spiel gekauft",
+  "game_once": "Einmalkauf: Das Spiel gehört dir für immer. Nicht im Abo enthalten.",
+  "game_no_file": "Die Spieldatei erscheint hier bald.",
+  "game_need_account": "Zum Kaufen erstelle ein Konto oder",
+  "my_games": "Meine Spiele",
+  "game_deleted": "Spiel entfernt"
  },
  "fr": {
   "tagline": "jeux musicaux",
@@ -1064,12 +1094,18 @@
   "games_sub_title": "Dans l’abonnement",
   "games_sub_note": "L’abonnement ne couvre que Anneaux et Orbites.",
   "games_more_title": "Autres jeux",
-  "games_more_note": "Hors abonnement — ils s’ouvrent via un lien.",
+  "games_more_note": "Hors abonnement.",
   "games_soon_title": "Bientôt",
   "games_soon": "Bientôt",
   "games_open": "Ouvrir",
   "games_empty": "Les nouveaux jeux apparaîtront ici.",
-  "tg_topup": "Recharger dans Telegram"
+  "tg_topup": "Recharger dans Telegram",
+  "game_owned": "Jeu acheté",
+  "game_once": "Achat unique : le jeu reste à vous pour toujours. Hors abonnement.",
+  "game_no_file": "Le fichier du jeu apparaîtra bientôt ici.",
+  "game_need_account": "Pour acheter, créez un compte ou",
+  "my_games": "Mes jeux",
+  "game_deleted": "Jeu supprimé"
  },
  "pt": {
   "tagline": "jogos musicais",
@@ -1235,12 +1271,18 @@
   "games_sub_title": "Na assinatura",
   "games_sub_note": "A assinatura inclui apenas Anéis e Órbitas.",
   "games_more_title": "Outros jogos",
-  "games_more_note": "Fora da assinatura — abrem por um link.",
+  "games_more_note": "Fora da assinatura.",
   "games_soon_title": "Em breve",
   "games_soon": "Em breve",
   "games_open": "Abrir",
   "games_empty": "Novos jogos aparecerão aqui.",
-  "tg_topup": "Recarregar no Telegram"
+  "tg_topup": "Recarregar no Telegram",
+  "game_owned": "Jogo comprado",
+  "game_once": "Compra única: o jogo fica seu para sempre. Fora da assinatura.",
+  "game_no_file": "O arquivo do jogo aparecerá aqui em breve.",
+  "game_need_account": "Para comprar, crie uma conta ou",
+  "my_games": "Meus jogos",
+  "game_deleted": "Jogo removido"
  },
  "tr": {
   "tagline": "müzik oyunları",
@@ -1406,12 +1448,18 @@
   "games_sub_title": "Abonelikte",
   "games_sub_note": "Abonelik yalnızca Halkalar ve Yörüngeler’i kapsar.",
   "games_more_title": "Diğer oyunlar",
-  "games_more_note": "Aboneliğe dahil değil — bağlantıyla açılır.",
+  "games_more_note": "Aboneliğe dahil değil.",
   "games_soon_title": "Yakında",
   "games_soon": "Yakında",
   "games_open": "Aç",
   "games_empty": "Yeni oyunlar burada görünecek.",
-  "tg_topup": "Telegram’da yükle"
+  "tg_topup": "Telegram’da yükle",
+  "game_owned": "Oyun satın alındı",
+  "game_once": "Tek seferlik satın alma: oyun sonsuza dek sizin. Aboneliğe dahil değil.",
+  "game_no_file": "Oyun dosyası yakında burada olacak.",
+  "game_need_account": "Satın almak için hesap oluşturun veya",
+  "my_games": "Oyunlarım",
+  "game_deleted": "Oyun kaldırıldı"
  },
  "zh": {
   "tagline": "音乐游戏",
@@ -1577,11 +1625,17 @@
   "games_sub_title": "订阅包含",
   "games_sub_note": "订阅仅包含《圆环》和《轨道》。",
   "games_more_title": "更多游戏",
-  "games_more_note": "不含在订阅中，通过链接打开。",
+  "games_more_note": "不含在订阅中。",
   "games_soon_title": "即将推出",
   "games_soon": "即将推出",
   "games_open": "打开",
   "games_empty": "新游戏将在这里出现。",
-  "tg_topup": "在 Telegram 充值"
+  "tg_topup": "在 Telegram 充值",
+  "game_owned": "已购买",
+  "game_once": "一次性购买：游戏永久归您所有，不含在订阅中。",
+  "game_no_file": "游戏文件很快会出现在这里。",
+  "game_need_account": "购买前请先注册，或",
+  "my_games": "我的游戏",
+  "game_deleted": "游戏已删除"
  }
 }

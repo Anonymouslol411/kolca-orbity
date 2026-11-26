@@ -171,6 +171,8 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS games (
     id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'soon',
     url TEXT, cover TEXT, hue INTEGER NOT NULL DEFAULT 200, sort INTEGER NOT NULL DEFAULT 100, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS user_games (
+    user_id INTEGER NOT NULL, game_id INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, game_id));
 CREATE TABLE IF NOT EXISTS pending_regs (
     email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, lang TEXT, code_hash TEXT NOT NULL,
     expires INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, sent_at INTEGER NOT NULL);
@@ -195,6 +197,13 @@ def db_connect():
         except sqlite3.OperationalError:
             pass                # другой процесс уже добавил
     con.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_tg ON users(tg_id) WHERE tg_id IS NOT NULL')
+    gcols = {r[1] for r in con.execute('PRAGMA table_info(games)')}
+    for col, ddl in (('price', 'REAL'), ('file', 'TEXT')):
+        if col not in gcols:
+            try:
+                con.execute(f'ALTER TABLE games ADD COLUMN {col} {ddl}')
+            except sqlite3.OperationalError:
+                pass
     con.commit()
     return con
 
@@ -228,10 +237,47 @@ def can_download(u):
     return bool(u) and not u['banned'] and bool(u['lifetime'])
 
 
+def sale_game(con, gid):
+    """Игра из каталога, которая продаётся на сайте (статус «Продаётся» и цена больше нуля)."""
+    return con.execute("SELECT * FROM games WHERE id=? AND status='paid' AND price>0", (gid,)).fetchone()
+
+
+def product_price(con, product):
+    """Цена товара: 'month', 'forever' или 'game:<id>'. None — такого товара нет."""
+    if product in PRODUCTS:
+        return PRODUCTS[product]['price']
+    m = re.fullmatch(r'game:(\d{1,9})', product or '')
+    row = sale_game(con, int(m.group(1))) if m else None
+    return float(row['price']) if row else None
+
+
+def owns_game(con, user, gid):
+    return bool(user) and not user['banned'] and con.execute(
+        'SELECT 1 FROM user_games WHERE user_id=? AND game_id=?', (user['id'], gid)).fetchone() is not None
+
+
+def owned_games(con, user):
+    if not user:
+        return []
+    return con.execute('SELECT g.* FROM games g JOIN user_games ug ON ug.game_id=g.id WHERE ug.user_id=? ORDER BY g.sort, g.id',
+                       (user['id'],)).fetchall()
+
+
+def product_title(product):
+    """Название товара для страниц и админки."""
+    if product and product.startswith('game:'):
+        row = db().execute('SELECT title FROM games WHERE id=?', (int(product[5:]) if product[5:].isdigit() else 0,)).fetchone()
+        return row['title'] if row else t('game_deleted')
+    return t('plan_' + (product or ''))
+
+
 def grant(con, user_id, product=None, days=None):
     """Выдать доступ: товар ('month' / 'forever') или N дней."""
     u = con.execute('SELECT * FROM users WHERE id=?', (user_id,)).fetchone()
-    if product == 'forever':
+    if product and product.startswith('game:'):      # разовая покупка игры из каталога
+        con.execute('INSERT OR IGNORE INTO user_games (user_id, game_id, created_at) VALUES (?,?,?)',
+                    (user_id, int(product[5:]), now()))
+    elif product == 'forever':
         con.execute('UPDATE users SET lifetime=1 WHERE id=?', (user_id,))
     else:
         days = days if days is not None else PRODUCTS['month']['days']
@@ -357,7 +403,7 @@ def inject():
                 trial_days=TRIAL_DAYS, site_name=SITE_NAME, support_email=SUPPORT_EMAIL, games=GAMES,
                 products=PRODUCTS, methods=methods_available(), fmt_rub=fmt_rub, fmt_date=fmt_date,
                 can_play=can_play, can_download=can_download, now=now(),
-                tg_bot=tg_bot_username() if g.get('user') else '')
+                tg_bot=tg_bot_username() if g.get('user') else '', ptitle=product_title)
 
 
 def check_csrf():
@@ -400,6 +446,17 @@ def catalog(con):
 @app.route('/games')
 def games_page():
     return render_template('games.html', extra=catalog(db()))
+
+
+@app.route('/games/<int:gid>')
+def game_page(gid):
+    con = db()
+    row = con.execute('SELECT * FROM games WHERE id=?', (gid,)).fetchone()
+    if not row:
+        abort(404)
+    if row['status'] != 'paid':
+        return redirect(url_for('games_page'))
+    return render_template('game.html', g_=row, owned=owns_game(con, g.user, gid))
 
 
 @app.route('/covers/<name>')
@@ -752,19 +809,31 @@ def list_downloads():
                   key=lambda f: f['name'].lower())
 
 
+def game_files(con):
+    """Файлы, привязанные к играм каталога: они выдаются только купившим эту игру."""
+    return {r['file']: r['id'] for r in con.execute("SELECT id, file FROM games WHERE file IS NOT NULL AND file!=''")}
+
+
 @app.route('/downloads')
 def downloads():
+    con = db()
     ok = can_download(g.user)
-    return render_template('downloads.html', files=list_downloads() if ok else [], access=ok)
+    taken = game_files(con)
+    files = [f for f in list_downloads() if f['name'] not in taken] if ok else []
+    mine = owned_games(con, g.user)
+    return render_template('downloads.html', files=files, access=ok, mine=mine)
 
 
 @app.route('/download/<name>')
 @login_required
 def download_file(name):
-    if not can_download(g.user):
-        return redirect(url_for('downloads'))
     if name != secure_filename(name) or Path(name).suffix.lower() not in DOWNLOAD_EXT or not (DOWNLOADS_DIR / name).is_file():
         abort(404)
+    con = db()
+    gid = game_files(con).get(name)
+    allowed = owns_game(con, g.user, gid) if gid else can_download(g.user)
+    if not allowed:
+        return redirect(url_for('game_page', gid=gid) if gid else url_for('downloads'))
     resp = send_from_directory(DOWNLOADS_DIR, name, as_attachment=True)
     resp.headers['Cache-Control'] = 'private, no-store'
     return resp
@@ -774,7 +843,7 @@ def download_file(name):
 def new_order(con, user_id, product, method, status='pending'):
     oid = secrets.token_hex(8)
     con.execute('INSERT INTO orders (id, user_id, product, amount, method, status, created_at) VALUES (?,?,?,?,?,?,?)',
-                (oid, user_id, product, PRODUCTS[product]['price'], method, status, now()))
+                (oid, user_id, product, product_price(con, product), method, status, now()))
     con.commit()
     return oid
 
@@ -795,31 +864,33 @@ def complete_order(con, order, operation_id=None):
 @login_required
 def buy():
     check_csrf()
-    product = request.form.get('product')
+    product = request.form.get('product') or ''
     method = request.form.get('method')
-    if product not in PRODUCTS:
-        abort(400)
-    if product == 'forever' and g.user['lifetime']:
-        return redirect(url_for('account'))
     con = db()
+    price = product_price(con, product)
+    if price is None:
+        abort(400)
+    gid = int(product[5:]) if product.startswith('game:') else None
+    back = (lambda **kw: url_for('game_page', gid=gid, **kw)) if gid else (lambda **kw: url_for('pricing', **kw))
+    if (product == 'forever' and g.user['lifetime']) or (gid and owns_game(con, g.user, gid)):
+        return redirect(url_for('account'))
     if too_many(con, 'buy|' + str(g.user['id']), 20, 3600):
-        return redirect(url_for('pricing', toomany=1))
+        return redirect(back(toomany=1))
     note_attempt(con, 'buy|' + str(g.user['id']))
-    price = PRODUCTS[product]['price']
 
     if method == 'balance':
         cur = con.execute('UPDATE users SET balance=ROUND(balance-?, 2) WHERE id=? AND balance>=?', (price, g.user['id'], price))
         con.commit()
         if not cur.rowcount:
-            return redirect(url_for('pricing', lowbalance=1))
+            return redirect(back(lowbalance=1))
         con.execute('INSERT INTO balance_log (user_id, delta, reason, created_at) VALUES (?,?,?,?)',
-                    (g.user['id'], -price, f'Покупка: {product}', now()))
+                    (g.user['id'], -price, f'Покупка: {product_title(product)}', now()))
         oid = new_order(con, g.user['id'], product, 'balance')
         complete_order(con, con.execute('SELECT * FROM orders WHERE id=?', (oid,)).fetchone())
         return redirect(url_for('account', paid=1))
 
     if method not in methods_available():
-        return redirect(url_for('pricing', unavailable=1))
+        return redirect(back(unavailable=1))
     oid = new_order(con, g.user['id'], product, method)
     return redirect(url_for('pay', oid=oid))
 
@@ -836,7 +907,7 @@ def pay(oid):
         form = {'receiver': YOOMONEY_WALLET, 'quickpay-form': 'button', 'sum': f"{order['amount']:.2f}",
                 'label': order['id'], 'paymentType': 'AC' if order['method'] == 'yoomoney_card' else 'PC',
                 'successURL': f'{BASE_URL}/account?paid=1&o={order["id"]}',   # это лишь возврат на сайт: оплату проверяет сервер
-                'targets': f'{SITE_NAME}: {t("plan_" + order["product"])}'}
+                'targets': f'{SITE_NAME}: {product_title(order["product"])}'}
         return render_template('pay_yoomoney.html', form=form, order=order)
     return render_template('pay_card.html', order=order, card=fmt_card(CARD_NUMBER), holder=CARD_HOLDER, bank=CARD_BANK,
                            code=order['id'][:6].upper())
@@ -1119,6 +1190,8 @@ def user(uid):
     if not u:
         abort(404)
     return render_template('admin_user.html', u=u, msg=request.args.get('msg'),
+                           sale_games=con.execute("SELECT * FROM games WHERE status='paid' ORDER BY sort, id").fetchall(),
+                           mine={r['id'] for r in owned_games(con, u)},
                            orders=con.execute('SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 30', (uid,)).fetchall(),
                            balance_log=con.execute('SELECT * FROM balance_log WHERE user_id=? ORDER BY id DESC LIMIT 30', (uid,)).fetchall())
 
@@ -1135,6 +1208,7 @@ def delete_user(con, u):
     uid = u['id']
     con.execute('DELETE FROM balance_log WHERE user_id=?', (uid,))
     con.execute('DELETE FROM tg_links WHERE user_id=?', (uid,))
+    con.execute('DELETE FROM user_games WHERE user_id=?', (uid,))
     con.execute('UPDATE orders SET user_id=NULL WHERE user_id=?', (uid,))     # оплаты остаются в истории
     con.execute('DELETE FROM users WHERE id=?', (uid,))
     con.commit()
@@ -1206,6 +1280,19 @@ def user_action(uid, action):
         con.commit()
         admin_log(con, 'Разблокировал', u['email'])
         msg = 'unbanned'
+    elif action in ('give_game', 'revoke_game'):
+        gid = int(request.form.get('game') or 0) if (request.form.get('game') or '').isdigit() else 0
+        row = con.execute('SELECT * FROM games WHERE id=?', (gid,)).fetchone()
+        if not row:
+            abort(400)
+        if action == 'give_game':
+            grant(con, uid, product=f'game:{gid}')
+            admin_log(con, 'Выдал игру', u['email'], row['title'])
+        else:
+            con.execute('DELETE FROM user_games WHERE user_id=? AND game_id=?', (uid, gid))
+            con.commit()
+            admin_log(con, 'Забрал игру', u['email'], row['title'])
+        msg = 'game'
     elif action == 'logout_all':
         con.execute('UPDATE users SET session_ver=session_ver+1 WHERE id=?', (uid,))
         con.commit()
@@ -1241,11 +1328,11 @@ def order_action(oid, action):
         abort(404)
     if action == 'confirm':
         complete_order(con, o)
-        admin_log(con, 'Подтвердил оплату', o['email'], f"{o['product']}, {fmt_rub(o['amount'])}")
+        admin_log(con, 'Подтвердил оплату', o['email'], f"{product_title(o['product'])}, {fmt_rub(o['amount'])}")
     elif action == 'reject':
         con.execute("UPDATE orders SET status='rejected' WHERE id=? AND status IN ('pending','review')", (oid,))
         con.commit()
-        admin_log(con, 'Отклонил оплату', o['email'], f"{o['product']}, {fmt_rub(o['amount'])}")
+        admin_log(con, 'Отклонил оплату', o['email'], f"{product_title(o['product'])}, {fmt_rub(o['amount'])}")
     else:
         abort(400)
     return redirect(url_for('admin.orders', msg=action))
@@ -1283,13 +1370,20 @@ def games():
         if act == 'delete' and row:
             drop_cover(row['cover'])
             con.execute('DELETE FROM games WHERE id=?', (gid,))
+            con.execute('DELETE FROM user_games WHERE game_id=?', (gid,))
             con.commit()
             admin_log(con, 'Удалил игру', '', row['title'])
             return redirect(url_for('admin.games', msg='deleted'))
         if act == 'save':
             title = (request.form.get('title') or '').strip()[:60]
             desc = (request.form.get('description') or '').strip()[:300]
-            status = request.form.get('status') if request.form.get('status') in ('soon', 'live') else 'soon'
+            status = request.form.get('status') if request.form.get('status') in ('soon', 'live', 'paid') else 'soon'
+            price = parse_amount(request.form.get('price')) if status == 'paid' else None
+            gfile = secure_filename(request.form.get('file') or '') or None
+            if status == 'paid' and not price:
+                return redirect(url_for('admin.games', msg='bad_price', edit=gid or ''))
+            if gfile and not (DOWNLOADS_DIR / gfile).is_file():
+                gfile = None
             url = (request.form.get('url') or '').strip()[:300]
             if url and not re.fullmatch(r'https?://[^\s<>"]+', url):
                 return redirect(url_for('admin.games', msg='bad_url'))
@@ -1301,11 +1395,11 @@ def games():
             if not title:
                 return redirect(url_for('admin.games', msg='no_title'))
             if row:
-                con.execute('UPDATE games SET title=?, description=?, status=?, url=?, hue=?, sort=? WHERE id=?',
-                            (title, desc, status, url or None, hue, sort, gid))
+                con.execute('UPDATE games SET title=?, description=?, status=?, url=?, hue=?, sort=?, price=?, file=? WHERE id=?',
+                            (title, desc, status, url or None, hue, sort, price, gfile, gid))
             else:
-                gid = con.execute('INSERT INTO games (title, description, status, url, hue, sort, created_at) VALUES (?,?,?,?,?,?,?)',
-                                  (title, desc, status, url or None, hue, sort, now())).lastrowid
+                gid = con.execute('INSERT INTO games (title, description, status, url, hue, sort, price, file, created_at) '
+                                  'VALUES (?,?,?,?,?,?,?,?,?)', (title, desc, status, url or None, hue, sort, price, gfile, now())).lastrowid
             con.commit()
             f = request.files.get('cover')
             if f and f.filename:
@@ -1325,7 +1419,8 @@ def games():
         abort(400)
     edit = request.args.get('edit', '')
     cur = con.execute('SELECT * FROM games WHERE id=?', (int(edit),)).fetchone() if edit.isdigit() else None
-    return render_template('admin_games.html', games=catalog(con), cur=cur, msg=msg)
+    sold = {r['game_id']: r['n'] for r in con.execute('SELECT game_id, COUNT(*) n FROM user_games GROUP BY game_id')}
+    return render_template('admin_games.html', games=catalog(con), cur=cur, msg=msg, files=list_downloads(), sold=sold)
 
 
 @admin.route('/downloads', methods=['GET', 'POST'])

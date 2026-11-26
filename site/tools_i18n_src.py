@@ -922,6 +922,21 @@ R7 = {
 for code in T:
     T[code].update(R7[code])
 
+
+R8 = {
+ 'ru': dict(game_owned='Игра куплена', game_once='Разовая покупка: игра остаётся у вас навсегда. В подписку не входит.', game_no_file='Файл игры скоро появится здесь.', game_need_account='Чтобы купить, создайте аккаунт или', my_games='Мои игры', game_deleted='Игра удалена', games_more_note='В подписку не входят.'),
+ 'en': dict(game_owned='You own this game', game_once='One-time purchase: the game stays yours forever. Not part of the subscription.', game_no_file='The game file will appear here soon.', game_need_account='To buy, create an account or', my_games='My games', game_deleted='Game removed', games_more_note='Not part of the subscription.'),
+ 'uk': dict(game_owned='Гру куплено', game_once='Разова покупка: гра залишається у вас назавжди. До підписки не входить.', game_no_file='Файл гри незабаром з’явиться тут.', game_need_account='Щоб купити, створіть акаунт або', my_games='Мої ігри', game_deleted='Гру видалено', games_more_note='До підписки не входять.'),
+ 'es': dict(game_owned='Ya tienes este juego', game_once='Compra única: el juego es tuyo para siempre. No está en la suscripción.', game_no_file='El archivo del juego aparecerá aquí pronto.', game_need_account='Para comprar, crea una cuenta o', my_games='Mis juegos', game_deleted='Juego eliminado', games_more_note='No están en la suscripción.'),
+ 'de': dict(game_owned='Spiel gekauft', game_once='Einmalkauf: Das Spiel gehört dir für immer. Nicht im Abo enthalten.', game_no_file='Die Spieldatei erscheint hier bald.', game_need_account='Zum Kaufen erstelle ein Konto oder', my_games='Meine Spiele', game_deleted='Spiel entfernt', games_more_note='Nicht im Abo enthalten.'),
+ 'fr': dict(game_owned='Jeu acheté', game_once='Achat unique : le jeu reste à vous pour toujours. Hors abonnement.', game_no_file='Le fichier du jeu apparaîtra bientôt ici.', game_need_account='Pour acheter, créez un compte ou', my_games='Mes jeux', game_deleted='Jeu supprimé', games_more_note='Hors abonnement.'),
+ 'pt': dict(game_owned='Jogo comprado', game_once='Compra única: o jogo fica seu para sempre. Fora da assinatura.', game_no_file='O arquivo do jogo aparecerá aqui em breve.', game_need_account='Para comprar, crie uma conta ou', my_games='Meus jogos', game_deleted='Jogo removido', games_more_note='Fora da assinatura.'),
+ 'tr': dict(game_owned='Oyun satın alındı', game_once='Tek seferlik satın alma: oyun sonsuza dek sizin. Aboneliğe dahil değil.', game_no_file='Oyun dosyası yakında burada olacak.', game_need_account='Satın almak için hesap oluşturun veya', my_games='Oyunlarım', game_deleted='Oyun kaldırıldı', games_more_note='Aboneliğe dahil değil.'),
+ 'zh': dict(game_owned='已购买', game_once='一次性购买：游戏永久归您所有，不含在订阅中。', game_no_file='游戏文件很快会出现在这里。', game_need_account='购买前请先注册，或', my_games='我的游戏', game_deleted='游戏已删除', games_more_note='不含在订阅中。'),
+}
+for code in T:
+    T[code].update(R8[code])
+
 base = set(T['en'])
 for code, tr in T.items():
     missing = base - set(tr)
