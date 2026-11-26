@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Вход{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <div class="auth card">
+    <h1>Вход для администратора</h1>
+    {% if no_password %}
+      <div class="note warn">Пароль администратора ещё не задан. На сервере в папке сайта выполните:<br>
+        <code>sudo bash manage.sh admin-password</code></div>
+    {% else %}
+      {% if error %}<div class="note warn">{{ error }}</div>{% endif %}
+      <form method="post" autocomplete="off">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>Пароль<input type="password" name="password" required autofocus autocomplete="current-password"></label>
+        <button class="btn wide" type="submit">Войти</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Админка — {{ site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="section wide-admin">
+  <h1>Админка</h1>
+  {% include '_admin_nav.html' %}
+  {% if request.args.get('msg') == 'deleted' %}<div class="note ok">Аккаунт удалён.</div>{% endif %}
+  {% if not stats.ym %}<div class="note warn">API ЮMoney не подключён — оплата через ЮMoney на сайте выключена. В терминале: <code>sudo bash manage.sh yoomoney-auth</code></div>{% endif %}
+  {% if stats.review %}<div class="note warn"><a href="{{ url_for('admin.orders') }}">Переводов на карту ждут проверки: {{ stats.review }}</a></div>{% endif %}
+
+  <div class="stats">
+    <div class="stat"><b>{{ stats.users }}</b><span>пользователей</span></div>
+    <div class="stat"><b>{{ stats.forever }}</b><span>купили «Навсегда»</span></div>
+    <div class="stat"><b>{{ stats.month }}</b><span>с оплаченным месяцем</span></div>
+    <div class="stat"><b>{{ fmt_rub(stats.revenue_month) }}</b><span>оплат за 30 дней</span></div>
+    <div class="stat"><b>{{ fmt_rub(stats.revenue_total) }}</b><span>оплат всего</span></div>
+  </div>
+
+  <form class="admin-search" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Поиск по почте">
+    <select name="f">
+      <option value="" {% if not f %}selected{% endif %}>Все</option>
+      <option value="active" {% if f == 'active' %}selected{% endif %}>С доступом</option>
+      <option value="forever" {% if f == 'forever' %}selected{% endif %}>«Навсегда»</option>
+      <option value="balance" {% if f == 'balance' %}selected{% endif %}>С балансом</option>
+      <option value="banned" {% if f == 'banned' %}selected{% endif %}>Заблокированные</option>
+    </select>
+    <button class="btn small" type="submit">Найти</button>
+  </form>
+
+  <div class="table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>ID</th><th>Почта</th><th>Доступ</th><th>Баланс</th><th>Регистрация</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="{% if r.banned %}banned{% endif %}">
+        <td>{{ r.id }}</td>
+        <td><a href="{{ url_for('admin.user', uid=r.id) }}">{{ r.email }}</a>{% if r.banned %} <span class="tag red">бан</span>{% endif %}</td>
+        <td>{% if r.lifetime %}<span class="tag">навсегда</span>
+            {% elif (r.paid_until or 0) > now %}до {{ fmt_date(r.paid_until) }}
+            {% elif (r.trial_end or 0) > now %}пробный до {{ fmt_date(r.trial_end) }}
+            {% else %}—{% endif %}</td>
+        <td>{{ fmt_rub(r.balance) }}</td>
+        <td>{{ fmt_date(r.created_at) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">Никого не нашлось.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if pages > 1 %}
+  <div class="pager">
+    {% if page > 1 %}<a href="?q={{ q|urlencode }}&f={{ f }}&page={{ page - 1 }}">← назад</a>{% endif %}
+    <span>стр. {{ page }} из {{ pages }} · всего {{ total }}</span>
+    {% if page < pages %}<a href="?q={{ q|urlencode }}&f={{ f }}&page={{ page + 1 }}">дальше →</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

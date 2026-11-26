@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}{{ t(kind) }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow legal">
+  <h1>{{ t(kind) }}</h1>
+  {% for p in t(kind + '_text', site=site_name, days=trial_days, month=fmt_rub(products.month.price) if products.month else '—',
+                forever=fmt_rub(products.forever.price) if products.forever else '—', email=support_email or '—').split('\n') %}
+    <p>{{ p }}</p>
+  {% endfor %}
+</section>
+{% endblock %}

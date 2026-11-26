@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Журнал — Админка{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="section wide-admin">
+  <h1>Журнал действий</h1>
+  {% include '_admin_nav.html' %}
+  <div class="table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Когда</th><th>IP</th><th>Действие</th><th>Пользователь</th><th>Подробности</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td>{{ fmt_date(r.created_at, True) }}</td><td>{{ r.ip }}</td><td>{{ r.action }}</td><td>{{ r.target_email or '—' }}</td><td>{{ r.details or '' }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">Пока пусто.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

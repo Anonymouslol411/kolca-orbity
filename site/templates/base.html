@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ site_name }} — {{ t('tagline') }}{% endblock %}</title>
+<meta name="description" content="{{ t('meta_description') }}">
+<meta property="og:title" content="{{ site_name }} — {{ t('tagline') }}">
+<meta property="og:description" content="{{ t('meta_description') }}">
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="{{ url_for('index') }}"><span class="logo-mark"></span>{{ site_name }}</a>
+  <nav>
+    <a href="{{ url_for('index') }}#games">{{ t('nav_games') }}</a>
+    <a href="{{ url_for('pricing') }}">{{ t('nav_pricing') }}</a>
+    <a href="{{ url_for('downloads') }}">{{ t('nav_downloads') }}</a>
+    {% if user %}
+      <a href="{{ url_for('account') }}">{{ t('nav_account') }}</a>
+    {% else %}
+      <a href="{{ url_for('login') }}">{{ t('nav_login') }}</a>
+      <a class="btn small" href="{{ url_for('register') }}">{{ t('nav_register') }}</a>
+    {% endif %}
+    <form class="picker" method="get" action="">
+      <label class="sr" for="lang-select">{{ t('language') }}</label>
+      <select id="lang-select" name="lang" onchange="this.form.submit()">
+        {% for code, L in langs.items() %}<option value="{{ code }}" {% if code == lang %}selected{% endif %}>{{ L.name }}</option>{% endfor %}
+      </select>
+      <noscript><button type="submit">OK</button></noscript>
+    </form>
+  </nav>
+</header>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<footer class="foot">
+  <div>© {{ site_name }}</div>
+  <div class="foot-links">
+    <a href="{{ url_for('terms') }}">{{ t('terms') }}</a>
+    <a href="{{ url_for('privacy') }}">{{ t('privacy') }}</a>
+    {% if support_email %}<a href="mailto:{{ support_email }}">{{ support_email }}</a>{% endif %}
+  </div>
+</footer>
+</body>
+</html>

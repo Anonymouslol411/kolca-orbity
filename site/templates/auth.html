@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('title_' + mode) }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <div class="auth card">
+    <h1>{{ t('title_' + mode) }}</h1>
+    {% if error %}<div class="note warn">{{ error }}</div>{% endif %}
+
+    {% if mode == 'register' %}
+      <p class="muted">{{ t('register_sub', days=trial_days) }}</p>
+      <form method="post">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>{{ t('email') }}<input type="email" name="email" value="{{ email }}" required autocomplete="email"></label>
+        <label>{{ t('password') }}<input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+        <label class="check"><input type="checkbox" name="agree" value="1" required>
+          <span>{{ t('agree_prefix') }} <a href="{{ url_for('terms') }}" target="_blank">{{ t('terms') }}</a> {{ t('and_word') }} <a href="{{ url_for('privacy') }}" target="_blank">{{ t('privacy') }}</a></span></label>
+        <button class="btn wide" type="submit">{{ t('btn_register') }}</button>
+      </form>
+      <p class="muted">{{ t('have_account') }} <a href="{{ url_for('login') }}">{{ t('nav_login') }}</a></p>
+
+    {% elif mode == 'login' %}
+      <form method="post">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>{{ t('email') }}<input type="email" name="email" value="{{ email }}" required autocomplete="email"></label>
+        <label>{{ t('password') }}<input type="password" name="password" required autocomplete="current-password"></label>
+        <button class="btn wide" type="submit">{{ t('btn_login') }}</button>
+      </form>
+      <p class="muted"><a href="{{ url_for('forgot') }}">{{ t('forgot_link') }}</a></p>
+      <p class="muted">{{ t('no_account') }} <a href="{{ url_for('register') }}">{{ t('nav_register') }}</a></p>
+
+    {% elif mode == 'forgot' %}
+      {% if sent %}
+        <div class="note ok">{{ t('forgot_sent') }}</div>
+      {% else %}
+        <p class="muted">{{ t('forgot_sub') }}</p>
+        <form method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label>{{ t('email') }}<input type="email" name="email" required autocomplete="email"></label>
+          <button class="btn wide" type="submit">{{ t('btn_send_link') }}</button>
+        </form>
+      {% endif %}
+
+    {% elif mode == 'reset' %}
+      {% if invalid %}
+        <div class="note warn">{{ t('reset_invalid') }}</div>
+        <p><a href="{{ url_for('forgot') }}">{{ t('forgot_link') }}</a></p>
+      {% else %}
+        <form method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label>{{ t('new_password') }}<input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+          <button class="btn wide" type="submit">{{ t('btn_save') }}</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}{{ u.email }} — Админка{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="section wide-admin">
+  <p><a href="{{ url_for('admin.users') }}">← Все пользователи</a></p>
+  <h1>{{ u.email }}</h1>
+  {% include '_admin_nav.html' %}
+
+  {% set msgs = {
+    'granted': ('ok', 'Дни добавлены.'), 'forever': ('ok', 'Выдан доступ «Навсегда».'), 'revoked': ('ok', 'Доступ снят.'),
+    'balance': ('ok', 'Баланс изменён.'), 'banned': ('ok', 'Аккаунт заблокирован, все его входы завершены.'),
+    'unbanned': ('ok', 'Аккаунт разблокирован.'), 'sessions': ('ok', 'Пользователь разлогинен на всех устройствах.'),
+    'bad_days': ('warn', 'Укажите число дней от 1 до 3650.'), 'bad_amount': ('warn', 'Укажите сумму больше нуля.'),
+    'bad_confirm': ('warn', 'Для удаления введите почту пользователя точно.') } %}
+  {% if msg in msgs %}<div class="note {{ msgs[msg][0] }}">{{ msgs[msg][1] }}</div>{% endif %}
+
+  <div class="admin-grid">
+    <div class="card">
+      <h3>Доступ</h3>
+      {% if u.lifetime %}<p><span class="tag">Навсегда</span> — игра онлайн и скачивание</p>
+      {% elif (u.paid_until or 0) > now %}<p><b>Месяц онлайн</b> до {{ fmt_date(u.paid_until, True) }}</p>
+      {% elif (u.trial_end or 0) > now %}<p><b>Пробный период</b> до {{ fmt_date(u.trial_end, True) }}</p>
+      {% else %}<p><b>Нет доступа</b></p>{% endif %}
+      <p class="muted">ID {{ u.id }} · регистрация {{ fmt_date(u.created_at, True) }} · язык {{ u.lang or '—' }}</p>
+      {% if u.banned %}<p class="warn-text">Заблокирован{% if u.ban_reason %}: {{ u.ban_reason }}{% endif %}</p>{% endif %}
+
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='add_days') }}" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="number" name="days" min="1" max="3650" value="30" aria-label="Дней">
+        <button class="btn small" type="submit">Добавить дней игры</button>
+      </form>
+      {% if not u.lifetime %}
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='give_forever') }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn small" type="submit">Выдать «Навсегда»</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='revoke') }}" onsubmit="return confirm('Снять весь доступ (месяц, навсегда, пробный)?')">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn small danger" type="submit">Снять подписку</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Баланс: {{ fmt_rub(u.balance) }}</h3>
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='balance_add') }}" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="text" name="amount" inputmode="decimal" placeholder="Сумма, ₽" required>
+        <input type="text" name="reason" maxlength="200" placeholder="Комментарий">
+        <button class="btn small" type="submit">Начислить</button>
+      </form>
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='balance_sub') }}" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="text" name="amount" inputmode="decimal" placeholder="Сумма, ₽" required>
+        <input type="text" name="reason" maxlength="200" placeholder="Комментарий">
+        <button class="btn small danger" type="submit">Списать</button>
+      </form>
+      <p class="fine">Балансом пользователь может оплатить месяц или «Навсегда». В минус баланс не уходит.</p>
+    </div>
+
+    <div class="card">
+      <h3>Блокировка и удаление</h3>
+      {% if u.banned %}
+        <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='unban') }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn small" type="submit">Разблокировать</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='ban') }}" class="inline-form">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="text" name="reason" maxlength="200" placeholder="Причина (видна только вам)">
+          <button class="btn small danger" type="submit">Заблокировать</button>
+        </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='logout_all') }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="link-btn" type="submit">Разлогинить на всех устройствах</button>
+      </form>
+      <form method="post" action="{{ url_for('admin.user_action', uid=u.id, action='delete') }}" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="text" name="confirm" placeholder="Введите {{ u.email }}" autocomplete="off">
+        <button class="btn small danger" type="submit">Удалить аккаунт</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="admin-grid">
+    <div class="card">
+      <h3>Операции с балансом</h3>
+      {% for b in balance_log %}
+        <div class="log-row"><span>{{ fmt_date(b.created_at, True) }}</span><b class="{{ 'plus' if b.delta > 0 else 'minus' }}">{{ '%+.2f' % b.delta }} ₽</b><span class="muted">{{ b.reason }}</span></div>
+      {% else %}<p class="muted">Пока нет.</p>{% endfor %}
+    </div>
+    <div class="card">
+      <h3>Покупки</h3>
+      {% for o in orders %}
+        <div class="log-row"><span>{{ fmt_date(o.created_at, True) }}</span><b>{{ fmt_rub(o.amount) }}</b>
+          <span class="muted">{{ {'month': 'месяц', 'forever': 'навсегда'}.get(o.product) }} · {{ {'yoomoney_card': 'ЮMoney, карта', 'yoomoney_wallet': 'ЮMoney, кошелёк', 'card': 'перевод на карту', 'balance': 'с баланса'}.get(o.method) }} · {{ {'pending': 'не оплачен', 'review': 'ждёт проверки', 'paid': 'оплачен', 'rejected': 'отклонён'}.get(o.status) }}</span></div>
+      {% else %}<p class="muted">Пока нет.</p>{% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

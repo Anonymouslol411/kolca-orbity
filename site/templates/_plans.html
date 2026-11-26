@@ -1,0 +1,50 @@
+{# Три карточки: пробный период, месяц онлайн, навсегда #}
+<div class="plans">
+  <div class="plan small-plan">
+    <div class="plan-head">
+      <h3>{{ t('trial_title') }}</h3>
+      <div class="plan-price"><span class="amount">0 ₽</span></div>
+      <div class="plan-trial">{{ t('trial_desc', days=trial_days) }}</div>
+    </div>
+    {% if not user %}<a class="btn ghost wide" href="{{ url_for('register') }}">{{ t('cta_trial', days=trial_days) }}</a>{% endif %}
+  </div>
+
+  {% for code in ('month', 'forever') if code in products %}
+  {% set p = products[code] %}
+  <div class="plan {% if code == 'forever' %}best{% endif %}">
+    {% if code == 'forever' %}<div class="badge">{{ t('badge_best') }}</div>{% endif %}
+    <div class="plan-head">
+      <h3>{{ t('plan_' + code) }}</h3>
+      <div class="plan-price"><span class="amount">{{ fmt_rub(p.price) }}</span>
+        <span class="per">{% if code == 'month' %}/ {{ t('label_30days') }}{% else %}{{ t('label_once') }}{% endif %}</span></div>
+      <p class="muted">{{ t('plan_' + code + '_desc') }}</p>
+    </div>
+    <ul class="perks">
+      {% for i in range(1, 4) %}{% set k = ('pm%d' if code == 'month' else 'pf%d') % i %}{% if t(k) != k %}<li>{{ t(k) }}</li>{% endif %}{% endfor %}
+    </ul>
+
+    {% if user and code == 'forever' and user.lifetime %}
+      <div class="note ok">{{ t('owned') }}</div>
+    {% elif user %}
+      <form method="post" action="{{ url_for('buy') }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="product" value="{{ code }}">
+        <fieldset class="methods">
+          <legend>{{ t('method_label') }}</legend>
+          {% for m in methods %}
+            <label><input type="radio" name="method" value="{{ m }}" {% if loop.first %}checked{% endif %}> {{ t('m_' + m) }}</label>
+          {% endfor %}
+          {% if user.balance >= p.price %}
+            <label><input type="radio" name="method" value="balance" {% if not methods %}checked{% endif %}> {{ t('m_balance', balance=fmt_rub(user.balance)) }}</label>
+          {% endif %}
+        </fieldset>
+        <button class="btn big wide" type="submit" {% if not methods and user.balance < p.price %}disabled{% endif %}>{{ t('btn_buy', price=fmt_rub(p.price)) }}</button>
+      </form>
+    {% else %}
+      <a class="btn big wide" href="{{ url_for('register') }}">{{ t('btn_buy', price=fmt_rub(p.price)) }}</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<p class="fine center">{{ t('pay_note') }}</p>
+{% if not methods %}<p class="fine warn center">{{ t('pay_unavailable') }}</p>{% endif %}

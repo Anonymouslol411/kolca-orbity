@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}ЮMoney{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <div class="card">
+    <h1>Подключение ЮMoney</h1>
+    {% if code %}
+      <p>Скопируйте этот код и вставьте его в терминал, где запущена команда <code>manage.sh yoomoney-auth</code>:</p>
+      <div class="pay-code oauth-code">{{ code }}</div>
+      <p class="fine">Код одноразовый и действует несколько минут.</p>
+    {% else %}
+      <div class="note warn">ЮMoney не выдал код{% if error %} ({{ error }}){% endif %}. Запустите <code>sudo bash manage.sh yoomoney-auth</code> ещё раз.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

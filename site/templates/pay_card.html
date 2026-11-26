@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('card_title') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <h1>{{ t('card_title') }}</h1>
+  <div class="card">
+    <p>{{ t('card_step1', amount=fmt_rub(order.amount)) }}</p>
+    <div class="card-number">{{ card }}</div>
+    {% if holder or bank %}<p class="muted">{{ t('card_holder') }}: {{ holder }}{% if bank %} · {{ bank }}{% endif %}</p>{% endif %}
+    <p>{{ t('card_comment') }}</p>
+    <div class="pay-code">{{ code }}</div>
+  </div>
+  <form method="post" action="{{ url_for('pay_sent', oid=order.id) }}" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>{{ t('card_note_label') }}<input type="text" name="note" maxlength="200" required></label>
+    <button class="btn big wide" type="submit">{{ t('btn_i_paid') }}</button>
+    <p class="fine">{{ t('card_after') }}</p>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('pay_title') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow center">
+  <h1>{{ t('pay_title') }}</h1>
+  <p>{{ t('plan_' + order.product) }} — <b>{{ fmt_rub(order.amount) }}</b></p>
+  <p class="muted">{{ t('pay_redirect') }}</p>
+  <form id="ym" method="post" action="https://yoomoney.ru/quickpay/confirm">
+    {% for k, v in form.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <button class="btn big" type="submit">{{ t('btn_continue') }}</button>
+  </form>
+</section>
+<script>setTimeout(function(){ document.getElementById('ym').submit(); }, 600);</script>
+{% endblock %}

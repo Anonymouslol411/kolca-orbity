@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('nav_pricing') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section">
+  <h1 class="center">{{ t('pricing_title') }}</h1>
+  {% if request.args.get('need') %}<div class="note">{{ t('msg_need_sub') }}</div>{% endif %}
+  {% if request.args.get('unavailable') %}<div class="note warn">{{ t('pay_unavailable') }}</div>{% endif %}
+  {% if request.args.get('lowbalance') %}<div class="note warn">{{ t('err_low_balance') }}</div>{% endif %}
+  {% if request.args.get('toomany') %}<div class="note warn">{{ t('err_too_many') }}</div>{% endif %}
+  {% include '_plans.html' %}
+</section>
+{% endblock %}

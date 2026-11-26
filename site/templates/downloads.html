@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('download_title') }} — {{ site_name }}{% endblock %}
+{% block content %}
+<section class="section narrow">
+  <h1>{{ t('download_title') }}</h1>
+  {% if access %}
+    {% if files %}
+      <div class="card">
+        {% for f in files %}
+          <div class="dl-row">
+            <div>
+              <div class="dl-name">{{ f.name }}</div>
+              <div class="fine">{{ '%.1f' % (f.size / 1048576) }} MB · {{ fmt_date(f.mtime) }}</div>
+            </div>
+            <a class="btn" href="{{ url_for('download_file', name=f.name) }}">{{ t('download_btn') }}</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="note">{{ t('no_downloads') }}</div>
+    {% endif %}
+  {% else %}
+    <div class="note">{{ t('downloads_locked', price=fmt_rub(products.forever.price) if products.forever else '') }}</div>
+    <a class="btn big" href="{{ url_for('pricing') if user else url_for('register') }}">{{ t('plan_forever') }} — {{ fmt_rub(products.forever.price) if products.forever else '' }}</a>
+  {% endif %}
+</section>
+{% endblock %}

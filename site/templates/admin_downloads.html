@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Файлы — Админка{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<section class="section wide-admin">
+  <h1>Файлы для скачивания</h1>
+  {% include '_admin_nav.html' %}
+  {% if msg == 'uploaded' %}<div class="note ok">Файлы загружены.</div>{% endif %}
+  {% if msg == 'deleted' %}<div class="note ok">Файл удалён.</div>{% endif %}
+  {% if msg == 'bad_file' %}<div class="note warn">Можно загружать только {{ exts }}.</div>{% endif %}
+
+  <div class="card">
+    <p>Эти файлы видят и скачивают только покупатели «Навсегда». Загрузить можно и из терминала: <code>sudo bash manage.sh add-file Kolca.exe</code></p>
+    <form method="post" enctype="multipart/form-data" class="inline-form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="file" name="files" multiple accept="{{ exts }}">
+      <button class="btn small" type="submit">Загрузить</button>
+    </form>
+    <p class="fine">Файл с тем же именем заменит старый. Разрешено: {{ exts }}.</p>
+  </div>
+
+  <div class="card">
+    {% for f in files %}
+      <div class="dl-row">
+        <div><div class="dl-name">{{ f.name }}</div><div class="fine">{{ '%.1f' % (f.size / 1048576) }} MB · {{ fmt_date(f.mtime, True) }}</div></div>
+        <form method="post" onsubmit="return confirm('Удалить {{ f.name }}?')">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="delete" value="{{ f.name }}">
+          <button class="btn small danger" type="submit">Удалить</button>
+        </form>
+      </div>
+    {% else %}
+      <p class="muted">Файлов пока нет.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

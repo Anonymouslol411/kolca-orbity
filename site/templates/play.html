@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>{{ t('game_' + game) }} — {{ site_name }}</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='play.css') }}">
+</head>
+<body class="play">
+<iframe src="{{ url_for('game_file', game=game) }}" allow="autoplay; fullscreen" title="{{ t('game_' + game) }}"></iframe>
+<a class="back" href="{{ url_for('account') }}">← {{ t('back') }}</a>
+</body>
+</html>
