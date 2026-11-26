@@ -227,12 +227,14 @@ def set_setting(con, key, value):
 
 
 # --- доступ
+# Все игры сайта бесплатны: играть и скачивать может любой посетитель, даже без аккаунта.
+# Заблокированный администратором аккаунт по-прежнему ничего не получает.
 def can_play(u):
-    return bool(u) and not u['banned'] and (u['lifetime'] or (u['paid_until'] or 0) > now() or (u['trial_end'] or 0) > now())
+    return not (u and u['banned'])
 
 
 def can_download(u):
-    return bool(u) and not u['banned'] and bool(u['lifetime'])
+    return not (u and u['banned'])
 
 
 def sale_game(con, gid):
@@ -250,12 +252,8 @@ def product_price(con, product):
 
 
 def owns_game(con, user, gid):
-    """Есть ли у пользователя игра из каталога: купил её отдельно или у него «Навсегда» (открывает все игры)."""
-    if not user or user['banned']:
-        return False
-    if user['lifetime']:
-        return True
-    return con.execute('SELECT 1 FROM user_games WHERE user_id=? AND game_id=?', (user['id'], gid)).fetchone() is not None
+    """Игры каталога бесплатны для всех."""
+    return not (user and user['banned'])
 
 
 def owned_games(con, user):
@@ -407,7 +405,7 @@ def inject():
                 trial_days=TRIAL_DAYS, site_name=SITE_NAME, support_email=SUPPORT_EMAIL, games=GAMES,
                 products=PRODUCTS, methods=methods_available(), fmt_rub=fmt_rub, fmt_date=fmt_date,
                 can_play=can_play, can_download=can_download, now=now(),
-                tg_bot=tg_bot_username() if g.get('user') else '', ptitle=product_title)
+                tg_bot=tg_bot_username(), ptitle=product_title, registration_open=REGISTRATION_OPEN)
 
 
 def check_csrf():
@@ -474,7 +472,36 @@ def cover_file(name):
 
 @app.route('/pricing')
 def pricing():
-    return render_template('pricing.html')
+    return redirect(url_for('support'), 301)      # платных тарифов больше нет
+
+
+DONATE_MIN = 10
+DONATE_MAX_STARS = int(env('TG_DONATE_MAX_STARS') or 10000)
+DONATE_PRESETS = (100, 300, 500, 1000)
+
+
+@app.route('/support')
+def support():
+    """Поддержать разработчика: любая сумма, оплата звёздами в Telegram-боте."""
+    con = db()
+    bot = tg_bot_username(con)
+    max_rub = int(DONATE_MAX_STARS * TG_STAR_RUB)
+    raw = (request.args.get('amount') or '').replace(' ', '').replace(',', '.')
+    error = None
+    if raw:
+        try:
+            amount = int(float(raw))
+        except ValueError:
+            amount = 0
+        if not bot:
+            error = t('support_unavailable')
+        elif not DONATE_MIN <= amount <= max_rub:
+            error = t('support_range', min=fmt_rub(DONATE_MIN), max=fmt_rub(max_rub))
+        else:
+            return redirect(f'https://t.me/{bot}?start=d{amount}')
+    total = con.execute("SELECT COUNT(*), COALESCE(SUM(rub),0) FROM tg_payments WHERE kind='donate' AND refunded=0").fetchone()
+    return render_template('support.html', bot=bot, error=error, presets=DONATE_PRESETS, min_rub=DONATE_MIN, max_rub=max_rub,
+                           star_rub=TG_STAR_RUB, donors=total[0], value=raw[:12])
 
 
 @app.route('/terms')
@@ -525,8 +552,14 @@ def send_reg_code(con, email):
     return None
 
 
+# Регистрация скрыта: аккаунт для игр не нужен. Код оставлен — вернуть можно настройкой REGISTRATION_OPEN=1 в .env.
+REGISTRATION_OPEN = (env('REGISTRATION_OPEN') or '0') == '1'
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    if not REGISTRATION_OPEN:
+        return redirect(url_for('index'))
     if g.user:
         return redirect(url_for('account'))
     error, email = None, ''
@@ -574,6 +607,8 @@ def register():
 def verify():
     if g.user:
         return redirect(url_for('account'))
+    if not REGISTRATION_OPEN:
+        return redirect(url_for('index'))
     email = session.get('reg_email') or ''
     con = db()
     row = con.execute('SELECT * FROM pending_regs WHERE email=?', (email,)).fetchone() if email else None
@@ -786,22 +821,20 @@ def account_telegram():
 
 # ---------------------------------------------------------------- игры и скачивание
 @app.route('/play/<game>')
-@login_required
 def play(game):
     if game not in GAMES:
         abort(404)
     if not can_play(g.user):
-        return redirect(url_for('pricing', need=1))
+        abort(403)
     return render_template('play.html', game=game)
 
 
 @app.route('/games/<game>/')
-@login_required
 def game_file(game):
     if game not in GAMES or not can_play(g.user):
         abort(403)
     resp = send_from_directory(GAMES_DIR / game, 'index.html')
-    resp.headers['Cache-Control'] = 'private, no-store'
+    resp.headers['Cache-Control'] = 'public, max-age=300'
     return resp
 
 
@@ -824,12 +857,11 @@ def downloads():
     ok = can_download(g.user)
     taken = game_files(con)
     files = [f for f in list_downloads() if f['name'] not in taken] if ok else []
-    mine = owned_games(con, g.user)
+    mine = con.execute("SELECT * FROM games WHERE file IS NOT NULL AND file!='' ORDER BY sort, id").fetchall() if ok else []
     return render_template('downloads.html', files=files, access=ok, mine=mine)
 
 
 @app.route('/download/<name>')
-@login_required
 def download_file(name):
     if name != secure_filename(name) or Path(name).suffix.lower() not in DOWNLOAD_EXT or not (DOWNLOADS_DIR / name).is_file():
         abort(404)
@@ -839,7 +871,7 @@ def download_file(name):
     if not allowed:
         return redirect(url_for('game_page', gid=gid) if gid else url_for('downloads'))
     resp = send_from_directory(DOWNLOADS_DIR, name, as_attachment=True)
-    resp.headers['Cache-Control'] = 'private, no-store'
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
     return resp
 
 
@@ -867,6 +899,10 @@ def complete_order(con, order, operation_id=None):
 @app.route('/buy', methods=['POST'])
 @login_required
 def buy():
+    return redirect(url_for('support'))      # всё бесплатно: покупок больше нет
+
+
+def _buy_disabled():
     check_csrf()
     product = request.form.get('product') or ''
     method = request.form.get('method')
@@ -1182,6 +1218,9 @@ def users():
         revenue_total=one("SELECT COALESCE(SUM(amount),0) FROM orders WHERE status='paid' AND method!='balance'"),
     )
     stats['ym'] = True        # ЮMoney отключён — предупреждение в админке не нужно
+    d = con.execute("SELECT COUNT(*), COALESCE(SUM(rub),0), COALESCE(SUM(stars),0) FROM tg_payments WHERE kind='donate' AND refunded=0").fetchone()
+    d30 = con.execute("SELECT COALESCE(SUM(rub),0) FROM tg_payments WHERE kind='donate' AND refunded=0 AND created_at>?", (now() - 30 * 86400,)).fetchone()[0]
+    stats.update(donations=d[0], donated=d[1], donated_stars=d[2], donated_30=d30)
     stats['tg'] = bool(tg_bot_username(con))
     return render_template('admin_users.html', rows=rows, stats=stats, q=q, f=flt, page=page,
                            pages=max(1, (total + 49) // 50), total=total)

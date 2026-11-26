@@ -1,4 +1,5 @@
-"""Платёжный Telegram-бот сайта «Кольца и Орбиты».
+"""Telegram-бот сайта «Кольца и Орбиты»: принимает донаты разработчику звёздами Telegram (любая сумма).
+Игры на сайте бесплатные. Старый код пополнения баланса оставлен для счетов, выставленных раньше.
 
 Пополняет баланс аккаунта звёздами Telegram (валюта XTR): покупатель покупает звёзды в Telegram
 за рубли и платит ими в боте, а подписку потом оплачивает балансом на сайте.
@@ -98,35 +99,31 @@ def notify_admin(text):
 
 
 # ---------------------------------------------------------------- меню
-def show_menu(con, chat_id, u):
-    if not u:
-        send(chat_id, f'🎵 <b>{esc(SITE_NAME)}</b>\n\nЧтобы платить в боте, привяжите аккаунт сайта: войдите на сайте → '
-                      '«Аккаунт» → «Привязать Telegram». Ссылка вернёт вас сюда.', [site_button()])
+DONATE_PRESETS = (100, 300, 500, 1000)
+DONATE_MIN = 10
+DONATE_MAX_STARS = int(site.env('TG_DONATE_MAX_STARS') or 10000)
+
+
+def show_menu(con, chat_id, u=None):
+    rows = [[{'text': f'{fmt_rub(r)} ({stars_price(r)} ⭐)', 'callback_data': f'don:{r}'}] for r in DONATE_PRESETS]
+    rows.append([{'text': '✏️ Другая сумма', 'callback_data': 'don:other'}] + site_button())
+    send(chat_id, f'🎵 <b>{esc(SITE_NAME)}</b>\n\nВсе игры на сайте бесплатные. Если они вам нравятся, можно поддержать '
+                  f'разработчика звёздами Telegram ⭐ — на любую сумму (1 ⭐ = {fmt_rub(TG_STAR_RUB)}).\n\n'
+                  'Выберите сумму или просто напишите её числом, например <b>250</b>.', rows)
+
+
+def invoice_donation(chat_id, rub):
+    max_rub = int(DONATE_MAX_STARS * TG_STAR_RUB)
+    if not DONATE_MIN <= rub <= max_rub:
+        send(chat_id, f'Сумма должна быть от {fmt_rub(DONATE_MIN)} до {fmt_rub(max_rub)}. Напишите другое число.')
         return
-    if u['lifetime']:
-        access = '♾ Навсегда'
-    elif (u['paid_until'] or 0) > now():
-        access = f'🗓 Месяц онлайн до {fmt_date(u["paid_until"])}'
-    elif (u['trial_end'] or 0) > now():
-        access = f'🎁 Пробный период до {fmt_date(u["trial_end"], True)}'
-    else:
-        access = 'нет'
-    if u['banned']:
-        access = '⛔ аккаунт заблокирован'
-    rows = []
-    if not u['banned']:
-        rows += [[{'text': f'{n} ⭐ → {fmt_rub(n * TG_STAR_RUB)}', 'callback_data': f'top:{n}'}] for n in TG_TOPUP_PACKS]
-    rows.append([{'text': '🔄 Обновить', 'callback_data': 'menu'}] + site_button())
-    send(chat_id, f'🎵 <b>{esc(SITE_NAME)}</b>\n\nАккаунт: {esc(mask_email(u["email"]))}\nДоступ: {access}\n'
-                  f'Баланс: {fmt_rub(u["balance"])}\n\nЗдесь можно пополнить баланс звёздами Telegram ⭐ '
-                  f'(1 ⭐ = {fmt_rub(TG_STAR_RUB)}). Подписку оплачивайте балансом на сайте в разделе «Цены».',
-         rows)
-
-
-def show_topup(chat_id):
-    rows = [[{'text': f'{n} ⭐ → {fmt_rub(n * TG_STAR_RUB)}', 'callback_data': f'top:{n}'}] for n in TG_TOPUP_PACKS]
-    rows.append([{'text': '← Назад', 'callback_data': 'menu'}])
-    send(chat_id, f'Пополнение баланса. 1 ⭐ = {fmt_rub(TG_STAR_RUB)}.\nБалансом можно оплатить покупки на сайте.', rows)
+    stars = stars_price(rub)
+    try:
+        send_invoice(chat_id, 'Поддержка разработчика', f'Спасибо, что поддерживаете игры {SITE_NAME}! {fmt_rub(rub)} → {stars} ⭐.',
+                     f'd:{stars}', stars)
+    except TgError as e:
+        log.warning('Счёт на донат %s ⭐ не создан: %s', stars, e)
+        send(chat_id, 'Telegram не принял такую сумму — попробуйте поменьше.')
 
 
 # ---------------------------------------------------------------- счета
@@ -157,6 +154,12 @@ def check_payload(con, payload, tg_id, currency, amount):
         if amount != stars_price(order['amount']):
             return 'Цена изменилась — откройте меню и выберите покупку заново', None
         return None, {'kind': 'order', 'order': order, 'user': u, 'rub': order['amount']}
+    m = re.fullmatch(r'd:(\d{1,7})', payload or '')
+    if m:
+        stars = int(m.group(1))
+        if amount != stars or not 1 <= stars <= DONATE_MAX_STARS:
+            return 'Неверная сумма', None
+        return None, {'kind': 'donate', 'user': user_by_tg(con, tg_id), 'rub': round(stars * TG_STAR_RUB, 2)}
     m = re.fullmatch(r't:(\d+):(\d+)', payload or '')
     if m:
         u = con.execute('SELECT * FROM users WHERE id=?', (int(m.group(1)),)).fetchone()
@@ -197,6 +200,20 @@ def on_paid(con, msg):
                                 'при необходимости звёзды вернутся. Вопросы: /paysupport')
         return
     u, rub = data['user'], data['rub']
+    if data['kind'] == 'donate':
+        try:
+            con.execute('INSERT INTO tg_payments (charge_id, user_id, tg_id, stars, kind, rub, applied, created_at) '
+                        "VALUES (?,?,?,?,'donate',?,1,?)", (charge, u['id'] if u else None, tg_id, stars, rub, now()))
+            con.commit()
+        except sqlite3.IntegrityError:
+            con.rollback()
+            return
+        name = ' '.join(x for x in (msg['from'].get('first_name'), msg['from'].get('last_name')) if x) or 'без имени'
+        log.info('Донат: %s ⭐ (%s)', stars, fmt_rub(rub))
+        send(msg['chat']['id'], f'💛 Спасибо за поддержку! {stars} ⭐ получены — это очень помогает делать новые игры.')
+        notify_admin(f'💛 Донат {stars} ⭐ (≈{fmt_rub(rub)}) от {esc(name)}'
+                     f'{" (@" + esc(msg["from"]["username"]) + ")" if msg["from"].get("username") else ""}\nВозврат: /refund {esc(charge)}')
+        return
     try:
         con.execute('INSERT INTO tg_payments (charge_id, user_id, tg_id, stars, kind, rub, order_id, created_at) '
                     'VALUES (?,?,?,?,?,?,?,?)', (charge, u['id'], tg_id, stars, data['kind'], rub,
@@ -296,6 +313,12 @@ def on_message(con, msg):
     note_attempt(con, f'tgbot|{tg_id}')
     cmd, _, arg = text.partition(' ')
     cmd = cmd.split('@')[0].lower()
+    if cmd == '/start' and re.fullmatch(r'd\d{1,7}', arg.strip()):        # «Поддержать» на сайте
+        invoice_donation(chat_id, int(arg.strip()[1:]))
+        return
+    if re.fullmatch(r'\d{1,7}', text):                                          # сумма доната числом
+        invoice_donation(chat_id, int(text))
+        return
     if cmd == '/start' and re.fullmatch(r'[A-Za-z0-9_\-]{10,64}', arg.strip()):
         u, _ = link_account(con, chat_id, tg_id, arg.strip())
         if u:
@@ -312,7 +335,7 @@ def on_message(con, msg):
     if cmd == '/refund' and TG_ADMIN_ID and tg_id == TG_ADMIN_ID and arg.strip():
         refund(con, chat_id, arg.strip())
         return
-    show_menu(con, chat_id, user_by_tg(con, tg_id))
+    show_menu(con, chat_id)
 
 
 def on_callback(con, cq):
@@ -327,13 +350,12 @@ def on_callback(con, cq):
     if too_many(con, f'tgbot|{tg_id}', 30, 60):
         return
     note_attempt(con, f'tgbot|{tg_id}')
-    u = user_by_tg(con, tg_id)
-    if not u or data == 'menu':
-        show_menu(con, chat_id, u)
-    elif data == 'topup' or data.startswith('buy:'):      # покупки в боте убраны — только пополнение
-        show_topup(chat_id)
-    elif re.fullmatch(r'top:\d{1,6}', data):
-        invoice_topup(con, chat_id, u, int(data[4:]))
+    if data == 'don:other':
+        send(chat_id, f'Напишите сумму в рублях числом, например <b>250</b>.')
+    elif re.fullmatch(r'don:\d{1,7}', data):
+        invoice_donation(chat_id, int(data[4:]))
+    else:
+        show_menu(con, chat_id)
 
 
 def handle(update):
@@ -362,7 +384,7 @@ def prepare():
     set_setting(con, 'tg_bot_username', me['username'])
     con.close()
     api('deleteWebhook', drop_pending_updates=False)
-    api('setMyCommands', commands=[{'command': 'start', 'description': 'Меню и оплата'},
+    api('setMyCommands', commands=[{'command': 'start', 'description': 'Поддержать разработчика'},
                                    {'command': 'paysupport', 'description': 'Помощь с оплатой'},
                                    {'command': 'terms', 'description': 'Условия'}])
     log.info('Бот @%s запущен', me['username'])
